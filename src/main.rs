@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(author, version)]
-#[command(about = "Tools for working with mwscripts", long_about = None)]
+#[command(about = "A commandline tool for modding TES3 - Morrowind", long_about = None)]
 struct Cli {
     #[command(subcommand)]
     commands: Commands,
@@ -12,12 +12,12 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Dump scripts from a plugin.
+    /// Dump records from a plugin
     Dump {
         /// input path, may be a plugin or a folder
         input: Option<PathBuf>,
 
-        /// output directory to dump scripts to, defaults to cwd
+        /// output directory to dump records to, defaults to cwd
         #[arg(short, long)]
         output: Option<PathBuf>,
 
@@ -43,7 +43,7 @@ enum Commands {
         /// input path, may be a plugin or a folder
         input: Option<PathBuf>,
 
-        /// output directory to dump scripts to, defaults to cwd
+        /// output directory, defaults to cwd
         #[arg(short, long)]
         output: Option<PathBuf>,
 
@@ -52,23 +52,19 @@ enum Commands {
         format: ESerializedType,
     },
 
-    /// Deserialize a plugin from a human-readable format
+    /// Deserialize a text file from a human-readable format to a plugin
     Deserialize {
-        /// input path, may be a plugin or a folder
+        /// input path, may be a file or a folder
         input: Option<PathBuf>,
 
-        /// output directory to dump scripts to, defaults to cwd
+        /// output directory, defaults to cwd
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
 }
 
 fn main() {
-    let cli = Cli::parse();
-
-    // You can check for the existence of subcommands, and if found use their
-    // matches just as you would the top level cmd
-    match &cli.commands {
+    match &Cli::parse().commands {
         Commands::Dump {
             input,
             output,

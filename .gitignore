@@ -20,3 +20,4 @@ Cargo.lock
 tests/assets/Data Files/
 
 tests/assets/out
+.vscode/launch.json
