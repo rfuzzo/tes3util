@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
-use mwscript::{deserialize_plugin, dump, serialize_plugin, ESerializedType};
 use std::path::PathBuf;
+use tes3util::{deserialize_plugin, dump, serialize_plugin, ESerializedType};
 
 #[derive(Parser)]
 #[command(author, version)]

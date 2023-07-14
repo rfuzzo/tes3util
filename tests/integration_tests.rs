@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use mwscript::{deserialize_plugin, dump, pack, serialize_plugin, ESerializedType};
+use tes3util::{deserialize_plugin, dump, pack, serialize_plugin, ESerializedType};
 
 #[test]
 #[ignore]
@@ -65,7 +65,7 @@ fn test_dump_toml() -> std::io::Result<()> {
         false,
         &[],
         &[],
-        &mwscript::ESerializedType::Toml,
+        &tes3util::ESerializedType::Toml,
     )
 }
 #[test]

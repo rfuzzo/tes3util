@@ -5,7 +5,7 @@ A commandline tool for modding TES3 - Morrowind.
 ## Features
 
 ```cmd
-Usage: mwscript.exe <COMMAND>
+Usage: tes3util.exe <COMMAND>
 
 Commands:
   dump         Dump records from a plugin
