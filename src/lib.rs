@@ -738,7 +738,7 @@ fn get_textures_from_nif(path: &PathBuf) -> Result<Vec<String>, Error> {
     for texture in stream.objects_of_type::<nif::NiSourceTexture>() {
         match &texture.source {
             nif::TextureSource::External(e) => {
-                list.push(e.to_string());
+                list.push(e.to_string().to_lowercase());
             }
             nif::TextureSource::Internal(_i) => {
                 list.push(String::from("internal"));
