@@ -104,3 +104,10 @@ fn test_pack_json() -> std::io::Result<()> {
     let output = Path::new("tests/assets/out/test.json.esp");
     pack(input, Some(output), &ESerializedType::Json)
 }
+
+#[test]
+fn test_atlas_coverage() -> std::io::Result<()> {
+    let input = Path::new("tests/assets");
+    let output = Path::new("tests/assets/out");
+    tes3util::atlas_coverage(&Some(input.into()), &Some(output.into()))
+}

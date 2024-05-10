@@ -1,12 +1,14 @@
 use clap::ValueEnum;
 use std::{
-    fmt,
+    collections::HashMap,
+    env, fmt,
     fs::{self, File},
     io::{self, Error, ErrorKind, Read, Write},
     path::{Path, PathBuf},
 };
-use tes3::esp::TypeInfo;
 use tes3::esp::{EditorId, Plugin, Script, TES3Object};
+use tes3::{esp::TypeInfo, nif};
+use walkdir::WalkDir;
 
 #[derive(Default, Clone, ValueEnum)]
 pub enum ESerializedType {
@@ -634,4 +636,115 @@ pub fn pack(
     }
 
     plugin.save_path(output)
+}
+
+///////////////////////////////////////////////////////////////////////////
+/// AtlasCoverage
+
+pub fn atlas_coverage(input: &Option<PathBuf>, output: &Option<PathBuf>) -> std::io::Result<()> {
+    // check output path, default is cwd
+    let mut out_dir_path = env::current_dir()?;
+    if let Some(p) = output {
+        p.clone_into(&mut out_dir_path);
+    }
+
+    // check input path, default is cwd
+    let mut input_path = env::current_dir()?;
+    if let Some(p) = input {
+        p.clone_into(&mut input_path);
+    }
+
+    // map of textures by nif file
+    let mut map_none: HashMap<PathBuf, Vec<String>> = HashMap::new();
+    let mut map_some: HashMap<PathBuf, Vec<String>> = HashMap::new();
+
+    // log parse nif files
+    println!("Parsing nif files in: {}", input_path.display());
+
+    // get all .nif or .NIF files in the input folder recursively in a list
+    let mut nif_files = Vec::new();
+    for entry in WalkDir::new(input_path).into_iter().filter_map(|e| e.ok()) {
+        if entry.file_type().is_file() {
+            let path = entry.path().to_owned();
+            if is_extension(&path, "nif") {
+                nif_files.push(entry.path().to_path_buf());
+            }
+        }
+    }
+
+    // iterate over nif files
+    let count = nif_files.len();
+    for (i, path) in nif_files.into_iter().enumerate() {
+        // check if nif file
+        println!("[{}/{}] Parsing: {}", i, count, path.display());
+
+        // load nif
+        if let Ok(list) = get_textures_from_nif(&path.clone()) {
+            // if any entries in the list have "textures\atl" in them, add to map_some
+            // else add to map_none
+            let mut found = false;
+            for texture in &list {
+                if texture.contains("textures\\atl") {
+                    found = true;
+                    break;
+                }
+            }
+            if found {
+                map_some.insert(path, list);
+            } else {
+                map_none.insert(path, list);
+            }
+        }
+    }
+
+    // print maps count
+    println!(
+        "Nif files with textures in textures\\atl: {}",
+        map_some.len()
+    );
+    println!(
+        "Nif files without textures in textures\\atl: {}",
+        map_none.len()
+    );
+
+    // serialize map to output folder
+    println!("Serializing to: {}", out_dir_path.display());
+
+    // create output folder
+    if !out_dir_path.exists() {
+        fs::create_dir_all(&out_dir_path)?;
+    }
+    let mut output_path = out_dir_path.join("atlas_coverage");
+    output_path = append_ext("yaml", output_path);
+    // serialize to yaml
+    // make a new object with the two maps
+    let mut map = HashMap::new();
+    map.insert("with_atl", map_some);
+    map.insert("without_atl", map_none);
+
+    let text = serde_yaml::to_string(&map).unwrap();
+    let mut file = File::create(output_path)?;
+    file.write_all(text.as_bytes())?;
+
+    Ok(())
+}
+
+fn get_textures_from_nif(path: &PathBuf) -> Result<Vec<String>, Error> {
+    let mut list = Vec::new();
+
+    let mut stream = nif::NiStream::new();
+    stream.load_path(path)?;
+
+    for texture in stream.objects_of_type::<nif::NiSourceTexture>() {
+        match &texture.source {
+            nif::TextureSource::External(e) => {
+                list.push(e.to_string());
+            }
+            nif::TextureSource::Internal(_i) => {
+                list.push(String::from("internal"));
+            }
+        }
+    }
+
+    Ok(list)
 }

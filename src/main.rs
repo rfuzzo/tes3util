@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
-use tes3util::{deserialize_plugin, dump, serialize_plugin, ESerializedType};
+use tes3util::{atlas_coverage, deserialize_plugin, dump, serialize_plugin, ESerializedType};
 
 #[derive(Parser)]
 #[command(author, version)]
@@ -61,6 +61,16 @@ enum Commands {
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
+
+    /// Atlas coverage of all meshes
+    AtlasCoverage {
+        /// input path, may be a folder, defaults to cwd
+        input: Option<PathBuf>,
+
+        /// output directory, defaults to cwd
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
 }
 
 fn main() {
@@ -87,6 +97,10 @@ fn main() {
         Commands::Deserialize { input, output } => match deserialize_plugin(input, output) {
             Ok(_) => println!("Done."),
             Err(err) => println!("Error deserializing file: {}", err),
+        },
+        Commands::AtlasCoverage { input, output } => match atlas_coverage(input, output) {
+            Ok(_) => println!("Done."),
+            Err(err) => println!("Error running atlas coverage: {}", err),
         },
     }
 }
