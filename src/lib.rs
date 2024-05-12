@@ -1,4 +1,3 @@
-use clap::ValueEnum;
 use std::{
     collections::HashMap,
     env, fmt,
@@ -6,6 +5,10 @@ use std::{
     io::{self, Error, ErrorKind, Read, Write},
     path::{Path, PathBuf},
 };
+
+use clap::ValueEnum;
+use rayon::iter::IntoParallelRefIterator;
+use rayon::prelude::*;
 use tes3::esp::{EditorId, Plugin, Script, TES3Object};
 use tes3::{esp::TypeInfo, nif};
 use walkdir::WalkDir;
@@ -641,6 +644,16 @@ pub fn pack(
 ///////////////////////////////////////////////////////////////////////////
 /// AtlasCoverage
 
+fn read_file_contents(file_path: &String) -> io::Result<(String, Vec<String>)> {
+    // load nif
+    let path = PathBuf::from(&file_path);
+    if let Ok(list) = get_textures_from_nif(&path.clone()) {
+        return Ok((file_path.clone(), list));
+    }
+
+    Err(Error::new(ErrorKind::Other, "Failed to read file contents"))
+}
+
 pub fn atlas_coverage(input: &Option<PathBuf>, output: &Option<PathBuf>) -> std::io::Result<()> {
     // check output path, default is cwd
     let mut out_dir_path = env::current_dir()?;
@@ -655,8 +668,8 @@ pub fn atlas_coverage(input: &Option<PathBuf>, output: &Option<PathBuf>) -> std:
     }
 
     // map of textures by nif file
-    let mut map_none: HashMap<PathBuf, Vec<String>> = HashMap::new();
-    let mut map_some: HashMap<PathBuf, Vec<String>> = HashMap::new();
+    let mut map_none: HashMap<String, Vec<String>> = HashMap::new();
+    let mut map_some: HashMap<String, Vec<String>> = HashMap::new();
 
     // log parse nif files
     println!("Parsing nif files in: {}", input_path.display());
@@ -667,32 +680,40 @@ pub fn atlas_coverage(input: &Option<PathBuf>, output: &Option<PathBuf>) -> std:
         if entry.file_type().is_file() {
             let path = entry.path().to_owned();
             if is_extension(&path, "nif") {
-                nif_files.push(entry.path().to_path_buf());
+                nif_files.push(entry.path().to_string_lossy().into_owned());
             }
         }
     }
 
     // iterate over nif files
-    let count = nif_files.len();
-    for (i, path) in nif_files.into_iter().enumerate() {
-        // check if nif file
-        println!("[{}/{}] Parsing: {}", i, count, path.display());
+    // Read file contents in parallel
+    let contents: Vec<_> = nif_files
+        .par_iter() // Parallel iterator
+        .map(read_file_contents) // Read file contents
+        .collect::<Vec<_>>();
 
-        // load nif
-        if let Ok(list) = get_textures_from_nif(&path.clone()) {
-            // if any entries in the list have "textures\atl" in them, add to map_some
-            // else add to map_none
-            let mut found = false;
-            for texture in &list {
-                if texture.contains("textures\\atl") {
-                    found = true;
-                    break;
+    // iterate over results
+    for result in contents {
+        match result {
+            Ok((file, list)) => {
+                // if any entries in the list have "textures\atl" in them, add to map_some
+                // else add to map_none
+                let mut found = false;
+                for texture in &list {
+                    if texture.contains("textures\\atl") {
+                        found = true;
+                        break;
+                    }
+                }
+
+                if found {
+                    map_some.insert(file, list);
+                } else {
+                    map_none.insert(file, list);
                 }
             }
-            if found {
-                map_some.insert(path, list);
-            } else {
-                map_none.insert(path, list);
+            Err(e) => {
+                println!("Error: {}", e);
             }
         }
     }
@@ -708,23 +729,40 @@ pub fn atlas_coverage(input: &Option<PathBuf>, output: &Option<PathBuf>) -> std:
     );
 
     // serialize map to output folder
-    println!("Serializing to: {}", out_dir_path.display());
+    {
+        println!("Serializing to: {}", out_dir_path.display());
+        // create output folder
+        if !out_dir_path.exists() {
+            fs::create_dir_all(&out_dir_path)?;
+        }
+        let mut output_path = out_dir_path.join("atlas_coverage");
+        output_path = append_ext("yaml", output_path);
+        // serialize to yaml
+        // make a new object with the two maps
+        let mut map = HashMap::new();
+        map.insert("with_atl", &map_some);
+        map.insert("without_atl", &map_none);
 
-    // create output folder
-    if !out_dir_path.exists() {
-        fs::create_dir_all(&out_dir_path)?;
+        let text = serde_yaml::to_string(&map).unwrap();
+        let mut file = File::create(output_path)?;
+        file.write_all(text.as_bytes())?;
     }
-    let mut output_path = out_dir_path.join("atlas_coverage");
-    output_path = append_ext("yaml", output_path);
-    // serialize to yaml
-    // make a new object with the two maps
-    let mut map = HashMap::new();
-    map.insert("with_atl", map_some);
-    map.insert("without_atl", map_none);
 
-    let text = serde_yaml::to_string(&map).unwrap();
-    let mut file = File::create(output_path)?;
-    file.write_all(text.as_bytes())?;
+    // serialize some statistics
+    {
+        println!("Serializing stats to: {}", out_dir_path.display());
+        let mut stats = HashMap::new();
+        stats.insert("with_atl", map_some.len().to_string());
+        stats.insert("without_atl", map_none.len().to_string());
+        // coverage
+        let total = map_some.len() + map_none.len();
+        let coverage = (map_some.len() as f32 / total as f32) * 100.0;
+        stats.insert("coverage", coverage.to_string());
+
+        let text = serde_yaml::to_string(&stats).unwrap();
+        let mut file = File::create(out_dir_path.join("atlas_coverage_stats.yaml"))?;
+        file.write_all(text.as_bytes())?;
+    }
 
     Ok(())
 }
