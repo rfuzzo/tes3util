@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use tes3util::{deserialize_plugin, dump, pack, serialize_plugin, ESerializedType};
 
@@ -51,7 +51,7 @@ fn test_dump_yaml() -> std::io::Result<()> {
         false,
         &[],
         &[],
-        &ESerializedType::Yaml,
+        &Some(ESerializedType::Yaml),
     )
 }
 #[test]
@@ -65,7 +65,7 @@ fn test_dump_toml() -> std::io::Result<()> {
         false,
         &[],
         &[],
-        &tes3util::ESerializedType::Toml,
+        &Some(tes3util::ESerializedType::Toml),
     )
 }
 #[test]
@@ -79,30 +79,30 @@ fn test_dump_json() -> std::io::Result<()> {
         false,
         &[],
         &[],
-        &ESerializedType::Json,
+        &Some(ESerializedType::Json),
     )
 }
 
 #[test]
 #[ignore]
 fn test_pack_yaml() -> std::io::Result<()> {
-    let input = Path::new("tests/assets/out");
-    let output = Path::new("tests/assets/out/test.yaml.esp");
-    pack(input, Some(output), &ESerializedType::Yaml)
+    let input = PathBuf::from("tests/assets/out");
+    let output = PathBuf::from("tests/assets/out/test.yaml.esp");
+    pack(&Some(input), &Some(output), &Some(ESerializedType::Yaml))
 }
 #[test]
 #[ignore]
 fn test_pack_toml() -> std::io::Result<()> {
-    let input = Path::new("tests/assets/out");
-    let output = Path::new("tests/assets/out/test.toml.esp");
-    pack(input, Some(output), &ESerializedType::Toml)
+    let input = PathBuf::from("tests/assets/out");
+    let output = PathBuf::from("tests/assets/out/test.toml.esp");
+    pack(&Some(input), &Some(output), &Some(ESerializedType::Toml))
 }
 #[test]
 #[ignore]
 fn test_pack_json() -> std::io::Result<()> {
-    let input = Path::new("tests/assets/out");
-    let output = Path::new("tests/assets/out/test.json.esp");
-    pack(input, Some(output), &ESerializedType::Json)
+    let input = PathBuf::from("tests/assets/out");
+    let output = PathBuf::from("tests/assets/out/test.json.esp");
+    pack(&Some(input), &Some(output), &Some(ESerializedType::Json))
 }
 
 #[test]

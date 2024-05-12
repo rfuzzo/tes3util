@@ -155,6 +155,9 @@ pub fn serialize_plugin(
     }
 }
 
+///////////////////////////////////////////////////////////////////////////
+// Dump
+
 /// Dump data from an esp into files
 pub fn dump(
     input: &Option<PathBuf>,
@@ -162,7 +165,7 @@ pub fn dump(
     create: bool,
     include: &[String],
     exclude: &[String],
-    serialized_type: &ESerializedType,
+    serialized_type: &Option<ESerializedType>,
 ) -> std::io::Result<()> {
     let mut is_file = false;
     let mut is_dir = false;
@@ -201,6 +204,12 @@ pub fn dump(
         out_dir_path = p;
     }
 
+    // check serialized type, default is yaml
+    let mut stype = &ESerializedType::Yaml;
+    if let Some(t) = serialized_type {
+        stype = t;
+    }
+
     // dump plugin file
     if is_file {
         if create {
@@ -209,13 +218,13 @@ pub fn dump(
                 &out_dir_path.join(input_path.file_stem().unwrap()),
                 include,
                 exclude,
-                serialized_type,
+                stype,
             ) {
                 Ok(_) => {}
                 Err(e) => return Err(e),
             }
         } else {
-            match dump_plugin(input_path, out_dir_path, include, exclude, serialized_type) {
+            match dump_plugin(input_path, out_dir_path, include, exclude, stype) {
                 Ok(_) => {}
                 Err(e) => return Err(e),
             }
@@ -241,7 +250,7 @@ pub fn dump(
                         let plugin_name = path.file_stem().unwrap();
                         let out_path = &out_dir_path.join(plugin_name);
 
-                        match dump_plugin(&path, out_path, include, exclude, serialized_type) {
+                        match dump_plugin(&path, out_path, include, exclude, stype) {
                             Ok(_) => {}
                             Err(e) => return Err(e),
                         }
@@ -557,14 +566,29 @@ pub fn deserialize_plugin(
     }
 }
 
+///////////////////////////////////////////////////////////////////////////
+// Pack
+
+/// Pack a folder of serialized files into a plugin
 pub fn pack(
-    input_path: &Path,
-    output_path: Option<&Path>,
-    format: &ESerializedType,
+    cinput_path: &Option<PathBuf>,
+    output_path: &Option<PathBuf>,
+    cformat: &Option<ESerializedType>,
 ) -> Result<(), Error> {
+    // check input path, default is cwd
+    let mut input_path = env::current_dir()?;
+    if let Some(p) = cinput_path {
+        input_path.clone_from(p);
+    }
+
+    let format = match cformat {
+        Some(f) => f,
+        None => &ESerializedType::Yaml,
+    };
+
     let mut files = vec![];
     // get all files
-    for entry in fs::read_dir(input_path).unwrap().flatten() {
+    for entry in fs::read_dir(&input_path).unwrap().flatten() {
         let path = entry.path();
         if path.is_dir() && path.exists() {
             // match folder name with type_name

@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
-use tes3util::{atlas_coverage, deserialize_plugin, dump, serialize_plugin, ESerializedType};
+use tes3util::{atlas_coverage, deserialize_plugin, dump, pack, serialize_plugin, ESerializedType};
 
 #[derive(Parser)]
 #[command(author, version)]
@@ -21,6 +21,10 @@ enum Commands {
         #[arg(short, long)]
         output: Option<PathBuf>,
 
+        /// The extension to serialize to, default is yaml
+        #[arg(short, long, value_enum)]
+        format: Option<ESerializedType>,
+
         /// Create folder with plugin name, only available if input is a file
         #[arg(short, long)]
         create: bool,
@@ -32,10 +36,19 @@ enum Commands {
         /// Exclude specific records
         #[arg(short, long)]
         exclude: Vec<String>,
+    },
 
-        /// The extension to serialize to, default is yaml
+    /// Packs records from a folder into a plugin
+    Pack {
+        /// input path, may be a folder
+        input: Option<PathBuf>,
+
+        /// output path, may be a plugin
+        output: Option<PathBuf>,
+
+        /// The extension to serialize from, default is yaml
         #[arg(short, long, value_enum)]
-        format: ESerializedType,
+        format: Option<ESerializedType>,
     },
 
     /// Serialize a plugin to a human-readable format
@@ -85,6 +98,14 @@ fn main() {
         } => match dump(input, output, *create, include, exclude, format) {
             Ok(_) => println!("Done."),
             Err(err) => println!("Error dumping scripts: {}", err),
+        },
+        Commands::Pack {
+            input,
+            output,
+            format,
+        } => match pack(input, output, format) {
+            Ok(_) => println!("Done."),
+            Err(err) => println!("Error packing plugin: {}", err),
         },
         Commands::Serialize {
             input,
