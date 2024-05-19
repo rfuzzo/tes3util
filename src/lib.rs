@@ -64,7 +64,7 @@ fn parse_plugin(path: &PathBuf) -> io::Result<Plugin> {
         }
         _ => {
             // anything else is guaranteed to be invalid input
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid input."));
+            return Err(Error::new(ErrorKind::InvalidData, "Invalid input."));
         }
     }
 
@@ -82,7 +82,7 @@ pub fn serialize_plugin(
     input: &Option<PathBuf>,
     output: &Option<PathBuf>,
     format: &ESerializedType,
-) -> std::io::Result<()> {
+) -> io::Result<()> {
     let input_path: &PathBuf;
     // check no input
     if let Some(i) = input {
@@ -166,7 +166,7 @@ pub fn dump(
     include: &[String],
     exclude: &[String],
     serialized_type: &Option<ESerializedType>,
-) -> std::io::Result<()> {
+) -> io::Result<()> {
     let mut is_file = false;
     let mut is_dir = false;
 
@@ -368,7 +368,7 @@ fn write_object(object: &TES3Object, out_dir_path: &Path, serialized_type: &ESer
 }
 
 /// Write a tes3object script to a file
-fn write_script(script: &Script, out_dir: &Path) -> std::io::Result<()> {
+fn write_script(script: &Script, out_dir: &Path) -> io::Result<()> {
     if !out_dir.exists() {
         // create directory
         match fs::create_dir_all(out_dir) {
@@ -392,7 +392,7 @@ fn write_script(script: &Script, out_dir: &Path) -> std::io::Result<()> {
         Ok(mut file) => match file.write_all(script.text.as_bytes()) {
             Ok(_) => {
                 // todo verbosity
-                //println!("SCPT writen to: {}", output_path.display());
+                //println!("SCPT written to: {}", output_path.display());
             }
             Err(_) => {
                 return Err(Error::new(ErrorKind::Other, "File write failed"));
@@ -412,7 +412,7 @@ fn write_generic(
     name: &String,
     out_dir: &Path,
     typ: &ESerializedType,
-) -> std::io::Result<()> {
+) -> io::Result<()> {
     let text = match serialize(typ, object) {
         Ok(value) => value,
         Err(value) => return value,
@@ -493,7 +493,7 @@ fn write_to_file(out_dir: &Path, name: &String, text: String) -> Result<(), Erro
 pub fn deserialize_plugin(
     input: &Option<PathBuf>,
     output: &Option<PathBuf>,
-) -> std::io::Result<()> {
+) -> io::Result<()> {
     let input_path: &PathBuf;
     // check no input
     if let Some(i) = input {
@@ -678,7 +678,7 @@ fn read_file_contents(file_path: &String) -> io::Result<(String, Vec<String>)> {
     Err(Error::new(ErrorKind::Other, "Failed to read file contents"))
 }
 
-pub fn atlas_coverage(input: &Option<PathBuf>, output: &Option<PathBuf>) -> std::io::Result<()> {
+pub fn atlas_coverage(input: &Option<PathBuf>, output: &Option<PathBuf>) -> io::Result<()> {
     // check output path, default is cwd
     let mut out_dir_path = env::current_dir()?;
     if let Some(p) = output {
