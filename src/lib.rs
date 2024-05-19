@@ -81,7 +81,7 @@ fn parse_plugin(path: &PathBuf) -> io::Result<Plugin> {
 pub fn serialize_plugin(
     input: &Option<PathBuf>,
     output: &Option<PathBuf>,
-    format: &ESerializedType,
+    cformat: &Option<ESerializedType>,
 ) -> io::Result<()> {
     let input_path: &PathBuf;
     // check no input
@@ -106,6 +106,11 @@ pub fn serialize_plugin(
             "Input path does not exist",
         ));
     }
+
+    let format = match cformat {
+        Some(f) => f,
+        None => &ESerializedType::Yaml,
+    };
 
     let mut output_path = PathBuf::from(input_path.clone().to_str().unwrap());
     // check no input
@@ -493,6 +498,7 @@ fn write_to_file(out_dir: &Path, name: &String, text: String) -> Result<(), Erro
 pub fn deserialize_plugin(
     input: &Option<PathBuf>,
     output: &Option<PathBuf>,
+    overwrite: bool,
 ) -> io::Result<()> {
     let input_path: &PathBuf;
     // check no input
@@ -526,7 +532,24 @@ pub fn deserialize_plugin(
     }
 
     let mut output_path = PathBuf::from(input_path.clone().to_str().unwrap());
-    output_path = append_ext("esp", output_path);
+    if overwrite {
+        if let Some(path_str) = input_path.to_str() {
+            if let Some(stem) = path_str.to_owned().strip_suffix(".esp.yaml") {
+                output_path = PathBuf::from(stem.to_string()).with_extension("esp");
+            } else if let Some(stem) = path_str.to_owned().strip_suffix(".esp.toml") {
+                output_path = PathBuf::from(stem.to_string()).with_extension("esp");
+            } else if let Some(stem) = path_str.to_owned().strip_suffix(".esp.json") {
+                output_path = PathBuf::from(stem.to_string()).with_extension("esp");
+            } else {
+                output_path = input_path.with_extension("esp");
+            }
+        } else {
+            output_path = input_path.with_extension("esp");
+        }
+    } else {
+        output_path = append_ext("esp", output_path);
+    }
+
     // check no input
     if let Some(i) = output {
         output_path = i.to_path_buf();

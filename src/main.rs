@@ -62,7 +62,7 @@ enum Commands {
 
         /// The extension to serialize to, default is yaml
         #[arg(short, long, value_enum)]
-        format: ESerializedType,
+        format: Option<ESerializedType>,
     },
 
     /// Deserialize a text file from a human-readable format to a plugin
@@ -70,9 +70,13 @@ enum Commands {
         /// input path, may be a file or a folder
         input: Option<PathBuf>,
 
-        /// output directory, defaults to cwd
+        /// output file name, defaults to cwd
         #[arg(short, long)]
         output: Option<PathBuf>,
+
+        /// Overwrite existing plugin
+        #[arg(short = 'y', long)]
+        overwrite: bool,
     },
 
     /// Atlas coverage of all meshes
@@ -115,7 +119,11 @@ fn main() {
             Ok(_) => println!("Done."),
             Err(err) => println!("Error serializing plugin: {}", err),
         },
-        Commands::Deserialize { input, output } => match deserialize_plugin(input, output) {
+        Commands::Deserialize {
+            input,
+            output,
+            overwrite,
+        } => match deserialize_plugin(input, output, *overwrite) {
             Ok(_) => println!("Done."),
             Err(err) => println!("Error deserializing file: {}", err),
         },
