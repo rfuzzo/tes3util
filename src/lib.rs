@@ -534,11 +534,12 @@ pub fn deserialize_plugin(
     let mut output_path = PathBuf::from(input_path.clone().to_str().unwrap());
     if overwrite {
         if let Some(path_str) = input_path.to_str() {
-            if let Some(stem) = path_str.to_owned().strip_suffix(".esp.yaml") {
+            let path_str = path_str.to_owned().to_lowercase();
+            if let Some(stem) = path_str.strip_suffix(".esp.yaml") {
                 output_path = PathBuf::from(stem.to_string()).with_extension("esp");
-            } else if let Some(stem) = path_str.to_owned().strip_suffix(".esp.toml") {
+            } else if let Some(stem) = path_str.strip_suffix(".esp.toml") {
                 output_path = PathBuf::from(stem.to_string()).with_extension("esp");
-            } else if let Some(stem) = path_str.to_owned().strip_suffix(".esp.json") {
+            } else if let Some(stem) = path_str.strip_suffix(".esp.json") {
                 output_path = PathBuf::from(stem.to_string()).with_extension("esp");
             } else {
                 output_path = input_path.with_extension("esp");
@@ -573,10 +574,14 @@ pub fn deserialize_plugin(
             }
         } else if is_extension(input_path, "yaml") {
             let deserialized: Result<_, _> = serde_yaml::from_str(&text);
-            if let Ok(t) = deserialized {
-                plugin = t;
-            } else {
-                return Err(Error::new(ErrorKind::Other, "Failed to convert from yaml"));
+            match deserialized {
+                Ok(t) => {
+                    plugin = t;
+                }
+                Err(e) => {
+                    println!("{}", e);
+                    return Err(Error::new(ErrorKind::Other, "Failed to convert from yaml"));
+                }
             }
         }
 
