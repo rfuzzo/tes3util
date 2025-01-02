@@ -1,6 +1,8 @@
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
-use tes3util::{atlas_coverage, deserialize_plugin, dump, pack, serialize_plugin, ESerializedType};
+use tes3util::{
+    atlas_coverage, deserialize_plugin, dump, pack, serialize_plugin, sql_task, ESerializedType,
+};
 
 #[derive(Parser)]
 #[command(author, version)]
@@ -88,6 +90,16 @@ enum Commands {
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
+
+    /// Sql
+    Sql {
+        /// input path, may be a folder, defaults to cwd
+        input: Option<PathBuf>,
+
+        /// output directory, defaults to cwd
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
 }
 
 fn main() {
@@ -130,6 +142,10 @@ fn main() {
         Commands::AtlasCoverage { input, output } => match atlas_coverage(input, output) {
             Ok(_) => println!("Done."),
             Err(err) => println!("Error running atlas coverage: {}", err),
+        },
+        Commands::Sql { input, output } => match sql_task::sql_task(input, output) {
+            Ok(_) => println!("Done."),
+            Err(err) => println!("Error running sql command: {}", err),
         },
     }
 }

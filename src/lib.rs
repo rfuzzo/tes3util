@@ -13,6 +13,8 @@ use tes3::esp::{EditorId, Plugin, Script, TES3Object};
 use tes3::{esp::TypeInfo, nif};
 use walkdir::WalkDir;
 
+pub mod sql_task;
+
 #[derive(Default, Clone, ValueEnum)]
 pub enum ESerializedType {
     #[default]
@@ -154,7 +156,7 @@ pub fn serialize_plugin(
                 }
             };
 
-            return File::create(output_path)?.write_all(text.as_bytes());
+            File::create(output_path)?.write_all(text.as_bytes())
         }
         Err(_) => Err(Error::new(ErrorKind::Other, "Plugin parsing failed.")),
     }
@@ -694,7 +696,7 @@ pub fn pack(
 }
 
 ///////////////////////////////////////////////////////////////////////////
-/// AtlasCoverage
+// AtlasCoverage
 
 fn read_file_contents(file_path: &String) -> io::Result<(String, Vec<String>)> {
     // load nif
