@@ -15,6 +15,24 @@ use walkdir::WalkDir;
 
 pub mod sql_task;
 
+#[macro_export]
+macro_rules! as_option {
+    ( $x:expr ) => {
+        if $x.is_empty() {
+            None
+        } else {
+            Some($x.to_owned())
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! as_json {
+    ( $x:expr ) => {
+        serde_json::to_string_pretty(&$x).unwrap()
+    };
+}
+
 #[derive(Default, Clone, ValueEnum)]
 pub enum ESerializedType {
     #[default]
