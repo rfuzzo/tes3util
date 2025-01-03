@@ -1,11 +1,15 @@
+use crate::get_all_tags;
 use fnv_rs::{Fnv64, FnvHasher};
 use rusqlite::{params, Connection, Result};
+use tes3::esp::traits::TableSchema;
 use tes3::esp::EditorId;
+use tes3::esp::SqlInfo;
 //use sha1::{Digest, Sha1};
 use std::{collections::HashMap, path::PathBuf};
 
-use crate::as_option;
 use crate::as_json;
+use crate::as_option;
+use crate::create_from_tag;
 use crate::parse_plugin;
 
 struct PluginModel {
@@ -13,12 +17,6 @@ struct PluginModel {
     name: String,
     crc: u32,
     load_order: u32,
-}
-
-struct TableSchema {
-    name: &'static str,
-    columns: Vec<&'static str>,
-    constraints: Vec<&'static str>,
 }
 
 pub fn sql_task(input: &Option<PathBuf>, output: &Option<PathBuf>) -> Result<()> {
@@ -37,7 +35,16 @@ pub fn sql_task(input: &Option<PathBuf>, output: &Option<PathBuf>) -> Result<()>
             (), // empty list of parameters.
         )?;
 
-        create_tables(&db, &get_schemas())?;
+        let schemas = get_schemas();
+        create_tables(&db, &schemas)?;
+
+        // debug todo
+        for tag in get_all_tags() {
+            if let Some(instance) = create_from_tag(&tag) {
+                let txt = instance.table_insert();
+                println!("{}", txt);
+            }
+        }
 
         let mut plugins = HashMap::new();
 
@@ -114,145 +121,21 @@ fn create_tables(conn: &Connection, schemas: &[TableSchema]) -> Result<()> {
 }
 
 fn get_schemas() -> Vec<TableSchema> {
-    vec![
-        TableSchema {
-            name: "GMST",
-            columns: vec!["value TEXT"], // TODO union
-            constraints: vec![],
-        },
-        TableSchema {
-            name: "GLOB",
-            columns: vec!["value REAL"],
-            constraints: vec![],
-        },
-        TableSchema {
-            name: "CLAS",
-            columns: vec!["name TEXT", "description TEXT", "data TEXT"],
-            constraints: vec![],
-        },
-        TableSchema {
-            name: "FACT",
-            columns: vec![
-                "name TEXT",
-                "rank_names TEXT",
-                "reactions TEXT",
-                "data TEXT",
-            ],
-            constraints: vec![],
-        },
-        TableSchema {
-            name: "RACE",
-            columns: vec![
-                "name TEXT",
-                "spells TEXT",
-                "description TEXT",
-                "data TEXT",
-            ],
-            constraints: vec![],
-        },
-        TableSchema {
-            name: "MISC",
-            columns: vec![
-                "name TEXT",
-                "script TEXT",
-                "mesh TEXT",
-                "icon TEXT",
-                "weight REAL",
-                "value INTEGER",
-                "flags TEXT",
-            ],
-            constraints: vec!["FOREIGN KEY(script) REFERENCES SCPT(id)"],
-        },
-        TableSchema {
-            name: "STAT",
-            columns: vec!["mesh TEXT"],
-            constraints: vec![],
-        },
-        TableSchema {
-            name: "SCPT",
-            columns: vec!["text TEXT"],
-            constraints: vec![],
-        },
-        TableSchema {
-            name: "REGN",
-            columns: vec![
-                "name TEXT",
-                "weather_chances TEXT",
-                "sleep_creature TEXT",
-                "sounds TEXT",
-            ],
-            constraints: vec![],
-        },
-        TableSchema {
-            name: "NPC_",
-            columns: vec![
-                "name TEXT",
-                "script TEXT",
-                "mesh TEXT",
-                "inventory TEXT",
-                "spells TEXT",
-                "ai_data TEXT",
-                "ai_packages TEXT",
-                "travel_destinations TEXT",
-                "race TEXT",
-                "class TEXT",
-                "faction TEXT",
-                "head TEXT",
-                "hair TEXT",
-                "npc_flags TEXT",
-                "blood_type INTEGER",
-                "data_level INTEGER",
-                "data_stats TEXT",
-                "data_disposition INTEGER",
-                "data_reputation INTEGER",
-                "data_rank INTEGER",
-                "data_gold INTEGER",
-            ],
-            constraints: vec![
-                "FOREIGN KEY(script) REFERENCES SCPT(id)",
-                "FOREIGN KEY(class) REFERENCES CLAS(id)",
-                "FOREIGN KEY(faction) REFERENCES FACT(id)",
-                "FOREIGN KEY(race) REFERENCES RACE(id)",
-            ],
-        },
-        TableSchema {
-            name: "ACTI",
-            columns: vec!["name TEXT", "script TEXT", "mesh TEXT"],
-            constraints: vec!["FOREIGN KEY(script) REFERENCES SCPT(id)"],
-        },
-        TableSchema {
-            name: "LEVI",
-            columns: vec![
-                "leveled_item_flags TEXT",
-                "chance_none INTEGER",
-                "items TEXT",
-            ],
-            constraints: vec![],
-        },
-        TableSchema {
-            name: "CELL",
-            columns: vec![
-                "name TEXT",
-                "data_flags TEXT",
-                "data_grid TEXT",
-                "region TEXT",
-                "water_height REAL",
-                "cell_references TEXT",
-            ],
-            constraints: vec!["FOREIGN KEY(region) REFERENCES REGN(id)"],
-        },
-    ]
+    let mut schemas = Vec::new();
+    for tag in get_all_tags() {
+        if let Some(instance) = create_from_tag(&tag) {
+            schemas.push(instance.table_schema());
+        }
+    }
+
+    schemas
 }
 
 fn insert_into_db(db: &Connection, hash: &str, record: &tes3::esp::TES3Object) {
     match record {
         tes3::esp::TES3Object::GameSetting(s) => {
             db.execute(
-                "INSERT INTO 
-                GMST 
-                (id, mod, value) 
-                VALUES 
-                (?1, ?2, ?3)",
+                s.table_insert().as_str(),
                 params![s.id, hash, as_json!(s.value)],
             )
             .unwrap_or_else(|_| panic!("Could not insert into db {}", s.id));
@@ -264,56 +147,50 @@ fn insert_into_db(db: &Connection, hash: &str, record: &tes3::esp::TES3Object) {
                 tes3::esp::GlobalValue::Long(l) => l.to_string(),
             };
 
-            db.execute(
-                "INSERT INTO 
-                GLOB 
-                (id, mod, value) 
-                VALUES 
-                (?1, ?2, ?3)",
-                params![s.id, hash, value],
-            )
-            .unwrap_or_else(|_| panic!("Could not insert into db {}", s.id));
+            db.execute(s.table_insert().as_str(), params![s.id, hash, value])
+                .unwrap_or_else(|_| panic!("Could not insert into db {}", s.id));
         }
         tes3::esp::TES3Object::Class(s) => {
             db.execute(
-                "INSERT INTO 
-                CLAS 
-                (id, mod, name, description, data) 
-                VALUES 
-                (?1, ?2, ?3, ?4, ?5)",
+                s.table_insert().as_str(),
                 params![s.id, hash, s.name, s.description, as_json!(s.data)],
             )
             .unwrap_or_else(|_| panic!("Could not insert into db {}", s.id));
         }
         tes3::esp::TES3Object::Faction(s) => {
             db.execute(
-                "INSERT INTO 
-                FACT 
-                (id, mod, name, rank_names, reactions, data) 
-                VALUES 
-                (?1, ?2, ?3, ?4, ?5, ?6)",
-                params![s.id, hash, s.name, as_json!(s.rank_names), as_json!(s.reactions), as_json!(s.data)],
+                s.table_insert().as_str(),
+                params![
+                    s.id,
+                    hash,
+                    s.name,
+                    as_json!(s.rank_names),
+                    as_json!(s.reactions),
+                    as_json!(s.data.favored_attributes),
+                    as_json!(s.data.requirements),
+                    as_json!(s.data.favored_skills),
+                    as_json!(s.data.flags)
+                ],
             )
             .unwrap_or_else(|_| panic!("Could not insert into db {}", s.id));
         }
         tes3::esp::TES3Object::Race(s) => {
             db.execute(
-                "INSERT INTO 
-                RACE 
-                (id, mod, name, spells, description, data) 
-                VALUES 
-                (?1, ?2, ?3, ?4, ?5, ?6)",
-                params![s.id, hash, s.name, as_json!(s.spells), s.description, as_json!(s.data)],
+                s.table_insert().as_str(),
+                params![
+                    s.id,
+                    hash,
+                    s.name,
+                    as_json!(s.spells),
+                    s.description,
+                    as_json!(s.data)
+                ],
             )
             .unwrap_or_else(|_| panic!("Could not insert into db {}", s.id));
         }
         tes3::esp::TES3Object::MiscItem(s) => {
             db.execute(
-                "INSERT INTO 
-                MISC 
-                (id, mod, name, script, mesh, icon, weight, value, flags) 
-                VALUES 
-                (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                s.table_insert().as_str(),
                 params![
                     s.id,
                     hash,
@@ -328,49 +205,65 @@ fn insert_into_db(db: &Connection, hash: &str, record: &tes3::esp::TES3Object) {
             )
             .unwrap_or_else(|_| panic!("Could not insert into db {}", s.id));
         }
-        tes3::esp::TES3Object::Static(s) => {
+        tes3::esp::TES3Object::Weapon(s) => {
             db.execute(
-                "INSERT INTO 
-                STAT 
-                (id, mod, mesh) 
-                VALUES 
-                (?1, ?2, ?3)",
-                params![s.id, hash, s.mesh],
+                s.table_insert().as_str(),
+                params![
+                    s.id,
+                    hash,
+                    s.name,
+                    as_option!(s.script),
+                    s.mesh,
+                    s.icon,
+                    s.enchanting,
+                    s.data.weight,
+                    s.data.value,
+                    as_json!(s.data.weapon_type),
+                    s.data.health,
+                    s.data.speed,
+                    s.data.reach,
+                    s.data.enchantment,
+                    s.data.chop_min,
+                    s.data.chop_max,
+                    s.data.slash_min,
+                    s.data.slash_max,
+                    s.data.thrust_min,
+                    s.data.thrust_max,
+                    as_json!(s.data.flags)
+                ],
             )
             .unwrap_or_else(|_| panic!("Could not insert into db {}", s.id));
         }
+        tes3::esp::TES3Object::Static(s) => {
+            db.execute(s.table_insert().as_str(), params![s.id, hash, s.mesh])
+                .unwrap_or_else(|_| panic!("Could not insert into db {}", s.id));
+        }
         tes3::esp::TES3Object::Npc(s) => {
-           db.execute(
-                "INSERT INTO 
-                NPC_ 
-                (id, mod, name, script, mesh, inventory, spells, ai_data, ai_packages, travel_destinations, 
-                race, class, faction, head, hair, npc_flags, blood_type, data_level, data_stats, data_disposition, 
-                data_reputation, data_rank, data_gold)
-                VALUES 
-                (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23)",
+            db.execute(
+                s.table_insert().as_str(),
                 params![
-                    s.id, 
-                    hash, 
-                    s.name, 
-                    as_option!(s.script), 
-                    s.mesh, 
-                    as_json!(s.inventory), 
-                    as_json!(s.spells), 
-                    as_json!(s.ai_data), 
-                    as_json!(s.ai_packages), 
-                    as_json!(s.travel_destinations), 
-                    s.race, 
-                    s.class, 
-                    as_option!(s.faction), 
-                    s.head, 
-                    s.hair, 
-                    as_json!(s.npc_flags), 
-                    s.blood_type, 
-                    s.data.level, 
-                    as_json!(s.data.stats), 
-                    s.data.disposition, 
-                    s.data.reputation, 
-                    s.data.rank, 
+                    s.id,
+                    hash,
+                    s.name,
+                    as_option!(s.script),
+                    s.mesh,
+                    as_json!(s.inventory),
+                    as_json!(s.spells),
+                    as_json!(s.ai_data),
+                    as_json!(s.ai_packages),
+                    as_json!(s.travel_destinations),
+                    s.race,
+                    s.class,
+                    as_option!(s.faction),
+                    s.head,
+                    s.hair,
+                    as_json!(s.npc_flags),
+                    s.blood_type,
+                    s.data.level,
+                    as_json!(s.data.stats),
+                    s.data.disposition,
+                    s.data.reputation,
+                    s.data.rank,
                     s.data.gold
                 ],
             )
@@ -378,39 +271,34 @@ fn insert_into_db(db: &Connection, hash: &str, record: &tes3::esp::TES3Object) {
         }
         tes3::esp::TES3Object::Activator(s) => {
             db.execute(
-                "INSERT INTO 
-                ACTI 
-                (id, mod, name, script, mesh) 
-                VALUES 
-                (?1, ?2, ?3, ?4, ?5)",
+                s.table_insert().as_str(),
                 params![s.id, hash, s.name, as_option!(s.script), s.mesh],
             )
             .unwrap_or_else(|_| panic!("Could not insert into db {}", s.id));
         }
         tes3::esp::TES3Object::Script(s) => {
-            db.execute(
-                "INSERT INTO 
-                SCPT 
-                (id, mod, text) 
-                VALUES 
-                (?1, ?2, ?3)",
-                params![s.id, hash, s.text],
-            )
-            .unwrap_or_else(|_| panic!("Could not insert into db {}", s.id));
+            db.execute(s.table_insert().as_str(), params![s.id, hash, s.text])
+                .unwrap_or_else(|_| panic!("Could not insert into db {}", s.id));
         }
         tes3::esp::TES3Object::Region(s) => {
-           db.execute(
-                "INSERT INTO 
-                REGN 
-                (id, mod, name, weather_chances, sleep_creature, sounds) 
-                VALUES 
-                (?1, ?2, ?3, ?4, ?5, ?6)",
+            db.execute(
+                s.table_insert().as_str(),
                 params![
                     s.id,
                     hash,
                     s.name,
-                    as_json!(s.weather_chances),
+                    s.weather_chances.clear,
+                    s.weather_chances.cloudy,
+                    s.weather_chances.foggy,
+                    s.weather_chances.overcast,
+                    s.weather_chances.rain,
+                    s.weather_chances.thunder,
+                    s.weather_chances.ash,
+                    s.weather_chances.blight,
+                    s.weather_chances.snow,
+                    s.weather_chances.blizzard,
                     s.sleep_creature,
+                    as_json!(s.map_color),
                     as_json!(s.sounds)
                 ],
             )
@@ -418,12 +306,14 @@ fn insert_into_db(db: &Connection, hash: &str, record: &tes3::esp::TES3Object) {
         }
         tes3::esp::TES3Object::LeveledItem(s) => {
             db.execute(
-                "INSERT INTO 
-                LEVI 
-                (id, mod, leveled_item_flags, chance_none, items) 
-                VALUES 
-                (?1, ?2, ?3, ?4, ?5)",
-                params![s.id, hash, as_json!(s.leveled_item_flags), s.chance_none, as_json!(s.items)],
+                s.table_insert().as_str(),
+                params![
+                    s.id,
+                    hash,
+                    as_json!(s.leveled_item_flags),
+                    s.chance_none,
+                    as_json!(s.items)
+                ],
             )
             .unwrap_or_else(|_| panic!("Could not insert into db {}", s.id));
         }
@@ -433,11 +323,7 @@ fn insert_into_db(db: &Connection, hash: &str, record: &tes3::esp::TES3Object) {
             let id = s.editor_id().to_string();
 
             db.execute(
-                "INSERT INTO 
-                CELL 
-                (id, mod, name, data_flags, data_grid, region, water_height, cell_references) 
-                VALUES 
-                (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                s.table_insert().as_str(),
                 params![
                     id,
                     hash,

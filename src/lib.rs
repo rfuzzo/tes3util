@@ -858,3 +858,169 @@ fn get_textures_from_nif(path: &PathBuf) -> Result<Vec<String>, Error> {
 
     Ok(list)
 }
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ERecordType {
+    TES3,
+    ACTI,
+    ALCH,
+    APPA,
+    ARMO,
+    BODY,
+    BOOK,
+    BSGN,
+    CELL,
+    CLAS,
+    CLOT,
+    CONT,
+    CREA,
+    DIAL,
+    DOOR,
+    ENCH,
+    FACT,
+    GLOB,
+    GMST,
+    INFO,
+    INGR,
+    LAND,
+    LEVC,
+    LEVI,
+    LIGH,
+    LOCK,
+    LTEX,
+    MGEF,
+    MISC,
+    NPC_,
+    PGRD,
+    PROB,
+    RACE,
+    REGN,
+    REPA,
+    SCPT,
+    SKIL,
+    SNDG,
+    SOUN,
+    SPEL,
+    SSCR,
+    STAT,
+    WEAP,
+}
+
+impl From<&str> for ERecordType {
+    fn from(value: &str) -> Self {
+        match value {
+            "TES3" => ERecordType::TES3,
+            "GMST" => ERecordType::GMST,
+            "GLOB" => ERecordType::GLOB,
+            "CLAS" => ERecordType::CLAS,
+            "FACT" => ERecordType::FACT,
+            "RACE" => ERecordType::RACE,
+            "SOUN" => ERecordType::SOUN,
+            "SNDG" => ERecordType::SNDG,
+            "SKIL" => ERecordType::SKIL,
+            "MGEF" => ERecordType::MGEF,
+            "SCPT" => ERecordType::SCPT,
+            "REGN" => ERecordType::REGN,
+            "BSGN" => ERecordType::BSGN,
+            "SSCR" => ERecordType::SSCR,
+            "LTEX" => ERecordType::LTEX,
+            "SPEL" => ERecordType::SPEL,
+            "STAT" => ERecordType::STAT,
+            "DOOR" => ERecordType::DOOR,
+            "MISC" => ERecordType::MISC,
+            "WEAP" => ERecordType::WEAP,
+            "CONT" => ERecordType::CONT,
+            "CREA" => ERecordType::CREA,
+            "BODY" => ERecordType::BODY,
+            "LIGH" => ERecordType::LIGH,
+            "ENCH" => ERecordType::ENCH,
+            "NPC_" => ERecordType::NPC_,
+            "ARMO" => ERecordType::ARMO,
+            "CLOT" => ERecordType::CLOT,
+            "REPA" => ERecordType::REPA,
+            "ACTI" => ERecordType::ACTI,
+            "APPA" => ERecordType::APPA,
+            "LOCK" => ERecordType::LOCK,
+            "PROB" => ERecordType::PROB,
+            "INGR" => ERecordType::INGR,
+            "BOOK" => ERecordType::BOOK,
+            "ALCH" => ERecordType::ALCH,
+            "LEVI" => ERecordType::LEVI,
+            "LEVC" => ERecordType::LEVC,
+            "CELL" => ERecordType::CELL,
+            "LAND" => ERecordType::LAND,
+            "PGRD" => ERecordType::PGRD,
+            "DIAL" => ERecordType::DIAL,
+            "INFO" => ERecordType::INFO,
+            _ => {
+                panic!("ArgumentException")
+            }
+        }
+    }
+}
+
+/// super dumb but I can't be bothered to mess around with enums now
+pub fn get_all_tags() -> Vec<String> {
+    let v = vec![
+        "TES3", "GMST", "GLOB", "CLAS", "FACT", "RACE", "SOUN", "SNDG", "SKIL", "MGEF", "SCPT",
+        "REGN", "BSGN", "SSCR", "LTEX", "SPEL", "STAT", "DOOR", "MISC", "WEAP", "CONT", "CREA",
+        "BODY", "LIGH", "ENCH", "NPC_", "ARMO", "CLOT", "REPA", "ACTI", "APPA", "LOCK", "PROB",
+        "INGR", "BOOK", "ALCH", "LEVI", "LEVC", "CELL", "LAND", "PGRD", "DIAL", "INFO",
+    ];
+    v.iter().map(|e| e.to_string()).collect::<Vec<String>>()
+}
+
+// Refactor this after e3
+/// Create a new record of the given tag
+pub fn create_from_tag(tag: &str) -> Option<TES3Object> {
+    create(ERecordType::from(tag))
+}
+
+/// Create a new record of the given type
+fn create(e: ERecordType) -> Option<TES3Object> {
+    match e {
+        ERecordType::TES3 => Some(TES3Object::from(tes3::esp::Header::default())),
+        ERecordType::GMST => Some(TES3Object::from(tes3::esp::GameSetting::default())),
+        ERecordType::GLOB => Some(TES3Object::from(tes3::esp::GlobalVariable::default())),
+        ERecordType::CLAS => Some(TES3Object::from(tes3::esp::Class::default())),
+        ERecordType::FACT => Some(TES3Object::from(tes3::esp::Faction::default())),
+        ERecordType::RACE => Some(TES3Object::from(tes3::esp::Race::default())),
+        ERecordType::SOUN => Some(TES3Object::from(tes3::esp::Sound::default())),
+        ERecordType::SNDG => Some(TES3Object::from(tes3::esp::SoundGen::default())),
+        ERecordType::SKIL => Some(TES3Object::from(tes3::esp::Skill::default())),
+        ERecordType::MGEF => Some(TES3Object::from(tes3::esp::MagicEffect::default())),
+        ERecordType::SCPT => Some(TES3Object::from(tes3::esp::Script::default())),
+        ERecordType::REGN => Some(TES3Object::from(tes3::esp::Region::default())),
+        ERecordType::BSGN => Some(TES3Object::from(tes3::esp::Birthsign::default())),
+        ERecordType::SSCR => Some(TES3Object::from(tes3::esp::StartScript::default())),
+        ERecordType::LTEX => Some(TES3Object::from(tes3::esp::LandscapeTexture::default())),
+        ERecordType::SPEL => Some(TES3Object::from(tes3::esp::Spell::default())),
+        ERecordType::STAT => Some(TES3Object::from(tes3::esp::Static::default())),
+        ERecordType::DOOR => Some(TES3Object::from(tes3::esp::Door::default())),
+        ERecordType::MISC => Some(TES3Object::from(tes3::esp::MiscItem::default())),
+        ERecordType::WEAP => Some(TES3Object::from(tes3::esp::Weapon::default())),
+        ERecordType::CONT => Some(TES3Object::from(tes3::esp::Container::default())),
+        ERecordType::CREA => Some(TES3Object::from(tes3::esp::Creature::default())),
+        ERecordType::BODY => Some(TES3Object::from(tes3::esp::Bodypart::default())),
+        ERecordType::LIGH => Some(TES3Object::from(tes3::esp::Light::default())),
+        ERecordType::ENCH => Some(TES3Object::from(tes3::esp::Enchanting::default())),
+        ERecordType::NPC_ => Some(TES3Object::from(tes3::esp::Npc::default())),
+        ERecordType::ARMO => Some(TES3Object::from(tes3::esp::Armor::default())),
+        ERecordType::CLOT => Some(TES3Object::from(tes3::esp::Clothing::default())),
+        ERecordType::REPA => Some(TES3Object::from(tes3::esp::RepairItem::default())),
+        ERecordType::ACTI => Some(TES3Object::from(tes3::esp::Activator::default())),
+        ERecordType::APPA => Some(TES3Object::from(tes3::esp::Apparatus::default())),
+        ERecordType::LOCK => Some(TES3Object::from(tes3::esp::Lockpick::default())),
+        ERecordType::PROB => Some(TES3Object::from(tes3::esp::Probe::default())),
+        ERecordType::INGR => Some(TES3Object::from(tes3::esp::Ingredient::default())),
+        ERecordType::BOOK => Some(TES3Object::from(tes3::esp::Book::default())),
+        ERecordType::ALCH => Some(TES3Object::from(tes3::esp::Alchemy::default())),
+        ERecordType::LEVI => Some(TES3Object::from(tes3::esp::LeveledItem::default())),
+        ERecordType::LEVC => Some(TES3Object::from(tes3::esp::LeveledCreature::default())),
+        ERecordType::CELL => Some(TES3Object::from(tes3::esp::Cell::default())),
+        ERecordType::LAND => Some(TES3Object::from(tes3::esp::Landscape::default())),
+        ERecordType::PGRD => Some(TES3Object::from(tes3::esp::PathGrid::default())),
+        ERecordType::DIAL => Some(TES3Object::from(tes3::esp::Dialogue::default())),
+        ERecordType::INFO => Some(TES3Object::from(tes3::esp::DialogueInfo::default())),
+    }
+}
