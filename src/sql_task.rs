@@ -1,84 +1,188 @@
 use crate::get_all_tags;
+use crate::get_all_tags_fk;
+use crate::get_plugins_sorted;
 use fnv_rs::{Fnv64, FnvHasher};
 use rusqlite::{params, Connection, Result};
+use std::{collections::HashMap, path::PathBuf};
 use tes3::esp::traits::TableSchema;
 use tes3::esp::EditorId;
 use tes3::esp::SqlInfo;
-//use sha1::{Digest, Sha1};
-use std::{collections::HashMap, path::PathBuf};
+use tes3::esp::TypeInfo;
 
-use crate::as_json;
-use crate::as_option;
 use crate::create_from_tag;
 use crate::parse_plugin;
 
 struct PluginModel {
-    id: String,
     name: String,
-    crc: u32,
+    crc: String,
     load_order: u32,
 }
 
-pub fn sql_task(input: &Option<PathBuf>, output: &Option<PathBuf>) -> Result<()> {
-    if let Some(output) = output {
-        // create esp db
-        let db = Connection::open(output)?;
+pub fn sql_task(input: &Option<PathBuf>, output: &Option<PathBuf>) -> std::io::Result<()> {
+    let mut inputpath = PathBuf::new();
+    if let Some(input) = input {
+        inputpath = input.clone();
+    }
 
-        // create plugins db
-        db.execute(
-            "CREATE TABLE plugins (
-            id   TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
+    // if input is a directory, process all files
+    // else process single file
+    let plugin_paths = if inputpath.is_file() {
+        vec![inputpath]
+    } else if inputpath.is_dir() {
+        get_plugins_sorted(&inputpath, false)
+    } else {
+        panic!("Invalid input path");
+    };
+
+    println!("Found plugins: {:?}", plugin_paths);
+
+    let mut outputpath = PathBuf::from("./tes3.db3");
+    if let Some(output) = output {
+        outputpath = output.clone();
+    }
+
+    if outputpath.is_dir() {
+        outputpath.push("tes3.db3");
+    }
+
+    // create esp db
+    let db = Connection::open(outputpath).expect("Could not create db");
+
+    // create plugins db
+    db.execute(
+        "CREATE TABLE plugins (
+            name TEXT PRIMARY KEY,
             crc INTEGER NOT NULL,
             load_order INTEGER NOT NULL
         )",
-            (), // empty list of parameters.
-        )?;
+        (), // empty list of parameters.
+    )
+    .expect("Could not create table");
 
-        let schemas = get_schemas();
-        create_tables(&db, &schemas)?;
+    // create tables
+    let schemas = get_schemas();
+    match create_tables(&db, &schemas) {
+        Ok(_) => {}
+        Err(e) => {
+            println!("Error creating tables: {}", e);
+        }
+    }
 
-        // debug todo
-        for tag in get_all_tags() {
-            if let Some(instance) = create_from_tag(&tag) {
-                let txt = instance.table_insert();
-                println!("{}", txt);
+    // debug todo
+    // for tag in get_all_tags() {
+    //     if let Some(instance) = create_from_tag(&tag) {
+    //         let txt = instance.table_insert_text();
+    //         println!("{}", txt);
+    //     }
+    // }
+
+    // populate plugins db
+    println!("Generating plugin db");
+
+    let mut plugins = Vec::new();
+    for path in plugin_paths.iter() {
+        if let Ok(plugin) = parse_plugin(path) {
+            let filename = path.file_name().unwrap().to_str().unwrap();
+            let crc = Fnv64::hash(filename.as_bytes()).as_hex();
+
+            let plugin_model = PluginModel {
+                name: filename.to_string(),
+                crc: crc.to_owned(), // todo
+                load_order: 0,       // todo
+            };
+
+            // add plugin to db
+            match db.execute(
+                "INSERT INTO plugins (name, crc, load_order) VALUES (?1, ?2, ?3)",
+                params![plugin_model.name, plugin_model.crc, plugin_model.load_order],
+            ) {
+                Ok(_) => {}
+                Err(e) => println!("Could not insert plugin into table {}", e),
+            }
+
+            plugins.push((filename, plugin));
+        }
+    }
+
+    // populate records tables
+    println!("Generating records db");
+
+    let mut errors = Vec::new();
+
+    for (name, plugin) in plugins.iter().rev() {
+        // group by tag
+        let mut groups = HashMap::new();
+        for record in &plugin.objects {
+            let tag = record.tag_str();
+            let group = groups.entry(tag.to_string()).or_insert_with(Vec::new);
+            group.push(record);
+        }
+
+        for tag in get_all_tags_fk() {
+            // skip headers
+            if tag == "TES3" {
+                continue;
+            }
+
+            if let Some(group) = groups.get(&tag) {
+                println!("Processing tag: {}", tag);
+                db.execute("BEGIN", [])
+                    .expect("Could not begin transaction");
+
+                for record in group {
+                    match record.table_insert(&db, name) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            let error_msg = format!(
+                                "[{}] Error inserting record '{}': '{}'",
+                                record.table_name(),
+                                record.editor_id(),
+                                e
+                            );
+                            println!("{}", error_msg);
+                            errors.push(error_msg);
+                        }
+                    }
+                }
+
+                db.execute("COMMIT", [])
+                    .expect("Could not commit transaction");
             }
         }
 
-        let mut plugins = HashMap::new();
+        // db.execute("BEGIN", [])
+        //     .expect("Could not begin transaction");
+        // for tag in get_all_tags_deferred() {
+        //     if let Some(group) = groups.get(&tag) {
+        //         println!("Processing tag: {}", tag);
 
-        if let Some(input) = input {
-            // populate db
-            if let Ok(plugin) = parse_plugin(input) {
-                let filename = input.file_name().unwrap().to_str().unwrap();
-                let hash = Fnv64::hash(filename.as_bytes()).as_hex();
-                //let mut hasher = Sha1::new();
-                let plugin_model = PluginModel {
-                    id: hash.to_owned(),
-                    name: filename.to_string(),
-                    crc: 0,        // todo
-                    load_order: 0, // todo
-                };
-                // add plugin to db
-                db.execute(
-                    "INSERT INTO plugins (id, name, crc, load_order) VALUES (?1, ?2, ?3, ?4)",
-                    params![
-                        plugin_model.id,
-                        plugin_model.name,
-                        plugin_model.crc,
-                        plugin_model.load_order
-                    ],
-                )?;
+        //         for record in group {
+        //             match record.table_insert(&db, name) {
+        //                 Ok(_) => {}
+        //                 Err(e) => {
+        //                     let error_msg = format!(
+        //                         "[{}] Error inserting record '{}': '{}'",
+        //                         record.table_name(),
+        //                         record.editor_id(),
+        //                         e
+        //                     );
+        //                     println!("{}", error_msg);
+        //                     errors.push(error_msg);
+        //                 }
+        //             }
+        //         }
+        //     }
+        // }
+        // db.execute("COMMIT", [])
+        //     .expect("Could not commit transaction");
+    }
 
-                plugins.insert(hash, plugin);
-            }
-        }
-
-        for (hash, plugin) in &plugins {
-            for record in &plugin.objects {
-                insert_into_db(&db, hash, record);
-            }
+    // serialize errors to file
+    if !errors.is_empty() {
+        let mut file = std::fs::File::create("errors.txt").expect("Could not create file");
+        for error in errors {
+            std::io::Write::write_all(&mut file, error.as_bytes()).unwrap();
+            std::io::Write::write_all(&mut file, b"\n").unwrap();
         }
     }
 
@@ -96,7 +200,7 @@ fn create_tables(conn: &Connection, schemas: &[TableSchema]) -> Result<()> {
                 id  TEXT PRIMARY KEY,
                 mod TEXT NOT NULL,
                 {},
-                FOREIGN KEY(mod) REFERENCES plugins(id)
+                FOREIGN KEY(mod) REFERENCES plugins(name)
                 )",
                 schema.name, columns
             )
@@ -106,14 +210,14 @@ fn create_tables(conn: &Connection, schemas: &[TableSchema]) -> Result<()> {
                 id  TEXT PRIMARY KEY,
                 mod TEXT NOT NULL,
                 {}, 
-                FOREIGN KEY(mod) REFERENCES plugins(id),
+                FOREIGN KEY(mod) REFERENCES plugins(name),
                 {}
                 )",
                 schema.name, columns, constraints
             )
         };
 
-        println!("{}", sql);
+        //println!("{}", sql);
 
         conn.execute(&sql, [])?;
     }
@@ -131,218 +235,8 @@ fn get_schemas() -> Vec<TableSchema> {
     schemas
 }
 
-fn insert_into_db(db: &Connection, hash: &str, record: &tes3::esp::TES3Object) {
-    match record {
-        tes3::esp::TES3Object::GameSetting(s) => {
-            db.execute(
-                s.table_insert().as_str(),
-                params![s.id, hash, as_json!(s.value)],
-            )
-            .unwrap_or_else(|_| panic!("Could not insert into db {}", s.id));
-        }
-        tes3::esp::TES3Object::GlobalVariable(s) => {
-            let value = match s.value {
-                tes3::esp::GlobalValue::Float(f) => f.to_string(),
-                tes3::esp::GlobalValue::Short(s) => s.to_string(),
-                tes3::esp::GlobalValue::Long(l) => l.to_string(),
-            };
-
-            db.execute(s.table_insert().as_str(), params![s.id, hash, value])
-                .unwrap_or_else(|_| panic!("Could not insert into db {}", s.id));
-        }
-        tes3::esp::TES3Object::Class(s) => {
-            db.execute(
-                s.table_insert().as_str(),
-                params![s.id, hash, s.name, s.description, as_json!(s.data)],
-            )
-            .unwrap_or_else(|_| panic!("Could not insert into db {}", s.id));
-        }
-        tes3::esp::TES3Object::Faction(s) => {
-            db.execute(
-                s.table_insert().as_str(),
-                params![
-                    s.id,
-                    hash,
-                    s.name,
-                    as_json!(s.rank_names),
-                    as_json!(s.reactions),
-                    as_json!(s.data.favored_attributes),
-                    as_json!(s.data.requirements),
-                    as_json!(s.data.favored_skills),
-                    as_json!(s.data.flags)
-                ],
-            )
-            .unwrap_or_else(|_| panic!("Could not insert into db {}", s.id));
-        }
-        tes3::esp::TES3Object::Race(s) => {
-            db.execute(
-                s.table_insert().as_str(),
-                params![
-                    s.id,
-                    hash,
-                    s.name,
-                    as_json!(s.spells),
-                    s.description,
-                    as_json!(s.data)
-                ],
-            )
-            .unwrap_or_else(|_| panic!("Could not insert into db {}", s.id));
-        }
-        tes3::esp::TES3Object::MiscItem(s) => {
-            db.execute(
-                s.table_insert().as_str(),
-                params![
-                    s.id,
-                    hash,
-                    s.name,
-                    as_option!(s.script),
-                    s.mesh,
-                    s.icon,
-                    s.data.weight,
-                    s.data.value,
-                    as_json!(s.data.flags)
-                ],
-            )
-            .unwrap_or_else(|_| panic!("Could not insert into db {}", s.id));
-        }
-        tes3::esp::TES3Object::Weapon(s) => {
-            db.execute(
-                s.table_insert().as_str(),
-                params![
-                    s.id,
-                    hash,
-                    s.name,
-                    as_option!(s.script),
-                    s.mesh,
-                    s.icon,
-                    s.enchanting,
-                    s.data.weight,
-                    s.data.value,
-                    as_json!(s.data.weapon_type),
-                    s.data.health,
-                    s.data.speed,
-                    s.data.reach,
-                    s.data.enchantment,
-                    s.data.chop_min,
-                    s.data.chop_max,
-                    s.data.slash_min,
-                    s.data.slash_max,
-                    s.data.thrust_min,
-                    s.data.thrust_max,
-                    as_json!(s.data.flags)
-                ],
-            )
-            .unwrap_or_else(|_| panic!("Could not insert into db {}", s.id));
-        }
-        tes3::esp::TES3Object::Static(s) => {
-            db.execute(s.table_insert().as_str(), params![s.id, hash, s.mesh])
-                .unwrap_or_else(|_| panic!("Could not insert into db {}", s.id));
-        }
-        tes3::esp::TES3Object::Npc(s) => {
-            db.execute(
-                s.table_insert().as_str(),
-                params![
-                    s.id,
-                    hash,
-                    s.name,
-                    as_option!(s.script),
-                    s.mesh,
-                    as_json!(s.inventory),
-                    as_json!(s.spells),
-                    as_json!(s.ai_data),
-                    as_json!(s.ai_packages),
-                    as_json!(s.travel_destinations),
-                    s.race,
-                    s.class,
-                    as_option!(s.faction),
-                    s.head,
-                    s.hair,
-                    as_json!(s.npc_flags),
-                    s.blood_type,
-                    s.data.level,
-                    as_json!(s.data.stats),
-                    s.data.disposition,
-                    s.data.reputation,
-                    s.data.rank,
-                    s.data.gold
-                ],
-            )
-            .unwrap_or_else(|_| panic!("Could not insert into db {}", s.id));
-        }
-        tes3::esp::TES3Object::Activator(s) => {
-            db.execute(
-                s.table_insert().as_str(),
-                params![s.id, hash, s.name, as_option!(s.script), s.mesh],
-            )
-            .unwrap_or_else(|_| panic!("Could not insert into db {}", s.id));
-        }
-        tes3::esp::TES3Object::Script(s) => {
-            db.execute(s.table_insert().as_str(), params![s.id, hash, s.text])
-                .unwrap_or_else(|_| panic!("Could not insert into db {}", s.id));
-        }
-        tes3::esp::TES3Object::Region(s) => {
-            db.execute(
-                s.table_insert().as_str(),
-                params![
-                    s.id,
-                    hash,
-                    s.name,
-                    s.weather_chances.clear,
-                    s.weather_chances.cloudy,
-                    s.weather_chances.foggy,
-                    s.weather_chances.overcast,
-                    s.weather_chances.rain,
-                    s.weather_chances.thunder,
-                    s.weather_chances.ash,
-                    s.weather_chances.blight,
-                    s.weather_chances.snow,
-                    s.weather_chances.blizzard,
-                    s.sleep_creature,
-                    as_json!(s.map_color),
-                    as_json!(s.sounds)
-                ],
-            )
-            .unwrap_or_else(|_| panic!("Could not insert into db {}", s.id));
-        }
-        tes3::esp::TES3Object::LeveledItem(s) => {
-            db.execute(
-                s.table_insert().as_str(),
-                params![
-                    s.id,
-                    hash,
-                    as_json!(s.leveled_item_flags),
-                    s.chance_none,
-                    as_json!(s.items)
-                ],
-            )
-            .unwrap_or_else(|_| panic!("Could not insert into db {}", s.id));
-        }
-        tes3::esp::TES3Object::Cell(s) => {
-            let references =
-                serde_json::to_string_pretty(&s.references.values().collect::<Vec<_>>()).unwrap();
-            let id = s.editor_id().to_string();
-
-            db.execute(
-                s.table_insert().as_str(),
-                params![
-                    id,
-                    hash,
-                    s.name,
-                    as_json!(s.data.flags),
-                    as_json!(s.data.grid),
-                    s.region,
-                    s.water_height,
-                    references
-                ],
-            )
-            .unwrap_or_else(|_| panic!("Could not insert into db {}", id));
-        }
-        _ => {}
-    }
-}
-
 #[test]
-fn test_sql_task() -> Result<()> {
+fn test_sql_task() -> std::io::Result<()> {
     let input = std::path::Path::new("tests/assets/Morrowind.esm");
     let output = std::path::Path::new("./tes3.db3");
     // delete db if exists
@@ -352,3 +246,6 @@ fn test_sql_task() -> Result<()> {
 
     sql_task(&Some(input.into()), &Some(output.into()))
 }
+
+// testing
+// .\tes3util.exe sql d:\GitHub\__rfuzzo\tes3util\tests\assets\Morrowind.esm -o D:\GitHub\__rfuzzo\tes3util\tes3.db3

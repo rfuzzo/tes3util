@@ -22,3 +22,6 @@ tests/assets/Data Files/
 tests/assets/out
 .vscode/launch.json
 tests/assets/Morrowind.esm
+tes3.db3
+tes3.db3-journal
+errors.txt

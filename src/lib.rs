@@ -15,24 +15,6 @@ use walkdir::WalkDir;
 
 pub mod sql_task;
 
-#[macro_export]
-macro_rules! as_option {
-    ( $x:expr ) => {
-        if $x.is_empty() {
-            None
-        } else {
-            Some($x.to_owned())
-        }
-    };
-}
-
-#[macro_export]
-macro_rules! as_json {
-    ( $x:expr ) => {
-        serde_json::to_string_pretty(&$x).unwrap()
-    };
-}
-
 #[derive(Default, Clone, ValueEnum)]
 pub enum ESerializedType {
     #[default]
@@ -970,6 +952,27 @@ pub fn get_all_tags() -> Vec<String> {
     v.iter().map(|e| e.to_string()).collect::<Vec<String>>()
 }
 
+/// super dumb but I can't be bothered to mess around with enums now
+pub fn get_all_tags_fk() -> Vec<String> {
+    let v = vec![
+        // primary
+        "TES3", "GMST", "GLOB", "BSGN", "LAND", "LEVC", "LEVI", "LOCK", "LTEX", "REPA", "SKIL",
+        "SPEL", "REGN", "RACE", "CLAS", "ENCH", "FACT", "SOUN", "SCPT", "STAT",
+        // secondary
+        "INGR", "LIGH", "CONT", "WEAP", "PROB", "MISC", "SSCR", "CLOT", "ARMO", "BODY", "BOOK",
+        "CELL", "ACTI", "ALCH", "APPA", // cyclic
+        "CREA", "SNDG", // tertiary
+        "PGRD", "DOOR", "MGEF", "NPC_", "DIAL",
+        // "INFO", //todo disabled for now
+    ];
+    v.iter().map(|e| e.to_string()).collect::<Vec<String>>()
+}
+
+pub fn get_all_tags_deferred() -> Vec<String> {
+    let v = ["SNDG", "CREA"];
+    v.iter().map(|e| e.to_string()).collect::<Vec<String>>()
+}
+
 // Refactor this after e3
 /// Create a new record of the given tag
 pub fn create_from_tag(tag: &str) -> Option<TES3Object> {
@@ -1023,4 +1026,56 @@ fn create(e: ERecordType) -> Option<TES3Object> {
         ERecordType::DIAL => Some(TES3Object::from(tes3::esp::Dialogue::default())),
         ERecordType::INFO => Some(TES3Object::from(tes3::esp::DialogueInfo::default())),
     }
+}
+
+/// Get all plugins (esp, omwaddon, omwscripts) in a folder
+fn get_plugins_in_folder<P>(path: &P, use_omw_plugins: bool) -> Vec<PathBuf>
+where
+    P: AsRef<Path>,
+{
+    // get all plugins
+    let mut results: Vec<PathBuf> = vec![];
+    if let Ok(plugins) = fs::read_dir(path) {
+        plugins.for_each(|p| {
+            if let Ok(file) = p {
+                let file_path = file.path();
+                if file_path.is_file() {
+                    if let Some(ext_os) = file_path.extension() {
+                        let ext = ext_os.to_ascii_lowercase();
+                        if ext == "esm"
+                            || ext == "esp"
+                            || (use_omw_plugins && ext == "omwaddon")
+                            || (use_omw_plugins && ext == "omwscripts")
+                        {
+                            results.push(file_path);
+                        }
+                    }
+                }
+            }
+        });
+    }
+    results
+}
+
+fn get_plugins_sorted<P>(path: &P, use_omw_plugins: bool) -> Vec<PathBuf>
+where
+    P: AsRef<Path>,
+{
+    // get plugins
+    let mut plugins = get_plugins_in_folder(path, use_omw_plugins);
+
+    // sort
+    plugins.sort_by(|a, b| {
+        fs::metadata(a.clone())
+            .expect("filetime")
+            .modified()
+            .unwrap()
+            .cmp(
+                &fs::metadata(b.clone())
+                    .expect("filetime")
+                    .modified()
+                    .unwrap(),
+            )
+    });
+    plugins
 }
