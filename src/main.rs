@@ -1,7 +1,8 @@
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 use tes3util::{
-    atlas_coverage, deserialize_plugin, dump, pack, serialize_plugin, sql_task, ESerializedType,
+    atlas_task::atlas_coverage, deserialize_task::deserialize_plugin, dump_task::dump,
+    pack_task::pack, serialize_task::serialize_plugin, sql_task, ESerializedType,
 };
 
 #[derive(Parser)]

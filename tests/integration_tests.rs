@@ -1,6 +1,11 @@
 use std::path::{Path, PathBuf};
 
-use tes3util::{deserialize_plugin, dump, pack, serialize_plugin, ESerializedType};
+use atlas_task::atlas_coverage;
+use deserialize_task::deserialize_plugin;
+use dump_task::dump;
+use pack_task::pack;
+use serialize_task::serialize_plugin;
+use tes3util::*;
 
 #[test]
 #[ignore]
@@ -109,5 +114,5 @@ fn test_pack_json() -> std::io::Result<()> {
 fn test_atlas_coverage() -> std::io::Result<()> {
     let input = Path::new("tests/assets");
     let output = Path::new("tests/assets/out");
-    tes3util::atlas_coverage(&Some(input.into()), &Some(output.into()))
+    atlas_coverage(&Some(input.into()), &Some(output.into()))
 }
