@@ -1,16 +1,26 @@
-use crate::get_all_tags;
-use crate::get_all_tags_fk;
-use crate::get_plugins_sorted;
+use std::{collections::HashMap, path::PathBuf};
+
 use fnv_rs::{Fnv64, FnvHasher};
 use rusqlite::{params, Connection, Result};
-use std::{collections::HashMap, path::PathBuf};
-use tes3::esp::traits::TableSchema;
-use tes3::esp::EditorId;
-use tes3::esp::SqlInfo;
-use tes3::esp::TypeInfo;
+use tes3::esp::{traits::TableSchema, EditorId, SqlInfo, SqlInfoMeta, TypeInfo};
 
-use crate::create_from_tag;
-use crate::parse_plugin;
+use crate::*;
+
+#[macro_export]
+macro_rules! SQL_BEGIN {
+    ( $db:expr ) => {
+        $db.execute("BEGIN", [])
+            .expect("Could not begin transaction");
+    };
+}
+
+#[macro_export]
+macro_rules! SQL_COMMIT {
+    ( $db:expr ) => {
+        $db.execute("COMMIT", [])
+            .expect("Could not commit transaction");
+    };
+}
 
 struct PluginModel {
     name: String,
@@ -60,11 +70,26 @@ pub fn sql_task(input: &Option<PathBuf>, output: &Option<PathBuf>) -> std::io::R
     .expect("Could not create table");
 
     // create tables
-    let schemas = get_schemas();
-    match create_tables(&db, &schemas) {
-        Ok(_) => {}
-        Err(e) => {
-            println!("Error creating tables: {}", e);
+    {
+        println!("Create tables");
+        let schemas = get_schemas();
+        match create_tables(&db, &schemas) {
+            Ok(_) => {}
+            Err(e) => {
+                println!("Error creating tables: {}", e);
+            }
+        }
+    }
+
+    // create join tables
+    {
+        println!("Create join tables");
+        let schemas = get_join_schemas();
+        match create_join_tables(&db, &schemas) {
+            Ok(_) => {}
+            Err(e) => {
+                println!("Error creating join tables: {}", e);
+            }
         }
     }
 
@@ -126,8 +151,8 @@ pub fn sql_task(input: &Option<PathBuf>, output: &Option<PathBuf>) -> std::io::R
 
             if let Some(group) = groups.get(&tag) {
                 println!("Processing tag: {}", tag);
-                db.execute("BEGIN", [])
-                    .expect("Could not begin transaction");
+
+                SQL_BEGIN!(db);
 
                 for record in group {
                     match record.table_insert(&db, name) {
@@ -145,8 +170,7 @@ pub fn sql_task(input: &Option<PathBuf>, output: &Option<PathBuf>) -> std::io::R
                     }
                 }
 
-                db.execute("COMMIT", [])
-                    .expect("Could not commit transaction");
+                SQL_COMMIT!(db);
             }
         }
 
@@ -193,12 +217,13 @@ fn create_tables(conn: &Connection, schemas: &[TableSchema]) -> Result<()> {
     for schema in schemas {
         let columns = schema.columns.join(", ");
         let constraints = schema.constraints.join(", ");
-        // TODO flags
+
         let sql = if constraints.is_empty() {
             format!(
                 "CREATE TABLE IF NOT EXISTS {} (
                 id  TEXT PRIMARY KEY,
                 mod TEXT NOT NULL,
+                flags TEXT NOT NULL,
                 {},
                 FOREIGN KEY(mod) REFERENCES plugins(name)
                 )",
@@ -208,6 +233,40 @@ fn create_tables(conn: &Connection, schemas: &[TableSchema]) -> Result<()> {
             format!(
                 "CREATE TABLE IF NOT EXISTS {} (
                 id  TEXT PRIMARY KEY,
+                mod TEXT NOT NULL,
+                flags TEXT NOT NULL,
+                {}, 
+                FOREIGN KEY(mod) REFERENCES plugins(name),
+                {}
+                )",
+                schema.name, columns, constraints
+            )
+        };
+
+        //println!("{}", sql);
+
+        conn.execute(&sql, [])?;
+    }
+    Ok(())
+}
+
+fn create_join_tables(conn: &Connection, schemas: &[TableSchema]) -> Result<()> {
+    for schema in schemas {
+        let columns = schema.columns.join(", ");
+        let constraints = schema.constraints.join(", ");
+
+        let sql = if constraints.is_empty() {
+            format!(
+                "CREATE TABLE IF NOT EXISTS {} (
+                mod TEXT NOT NULL,
+                {},
+                FOREIGN KEY(mod) REFERENCES plugins(name)
+                )",
+                schema.name, columns
+            )
+        } else {
+            format!(
+                "CREATE TABLE IF NOT EXISTS {} (
                 mod TEXT NOT NULL,
                 {}, 
                 FOREIGN KEY(mod) REFERENCES plugins(name),
@@ -230,6 +289,15 @@ fn get_schemas() -> Vec<TableSchema> {
         if let Some(instance) = create_from_tag(&tag) {
             schemas.push(instance.table_schema());
         }
+    }
+
+    schemas
+}
+
+fn get_join_schemas() -> Vec<TableSchema> {
+    let mut schemas = Vec::new();
+    for x in get_all_join_objects() {
+        schemas.push(x.table_schema());
     }
 
     schemas

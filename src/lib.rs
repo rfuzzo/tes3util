@@ -6,7 +6,7 @@ use std::{
 };
 
 use clap::ValueEnum;
-use tes3::esp::{Plugin, TES3Object};
+use tes3::esp::{Plugin, SqlJoinInfo, TES3Object};
 
 pub mod atlas_task;
 pub mod deserialize_task;
@@ -206,6 +206,17 @@ pub fn get_all_tags_fk() -> Vec<String> {
 pub fn get_all_tags_deferred() -> Vec<String> {
     let v = ["SNDG", "CREA"];
     v.iter().map(|e| e.to_string()).collect::<Vec<String>>()
+}
+
+pub fn get_all_join_objects() -> Vec<Box<dyn SqlJoinInfo>> {
+    let v: Vec<Box<dyn SqlJoinInfo>> = vec![
+        Box::new(tes3::esp::Effect::default()),
+        Box::new(tes3::esp::BipedObject::default()),
+        Box::new(tes3::esp::SpellJoin::default()),
+        Box::new(tes3::esp::SoundJoin::default()),
+        Box::new(tes3::esp::InventoryJoin::default()),
+    ];
+    v
 }
 
 // Refactor this after e3
