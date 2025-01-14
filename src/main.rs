@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tes3util::{
     atlas_task::atlas_coverage, deserialize_task::deserialize_plugin, dump_task::dump,
     pack_task::pack, serialize_task::serialize_plugin, sql_task, ESerializedType,
@@ -104,6 +104,9 @@ enum Commands {
 }
 
 fn main() {
+    // logger
+    tes3util::init_logger(Path::new("log.txt")).expect("Could not initialize logger");
+
     match &Cli::parse().commands {
         Commands::Dump {
             input,

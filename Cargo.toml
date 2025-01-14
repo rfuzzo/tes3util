@@ -14,6 +14,7 @@ walkdir = "2.5.0"
 rayon = "1.10.0"
 rusqlite = { version = "0.32.0", features = ["bundled"] }
 fnv_rs = "0.4"
+log = { version = "0.4", features = ["std"] }
 
 [dependencies.tes3]
 path = "tes3"

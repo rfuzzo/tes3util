@@ -1,7 +1,7 @@
 use std::{
     fmt,
     fs::{self, File},
-    io::{self, Error, ErrorKind, Read},
+    io::{self, Error, ErrorKind, Read, Write},
     path::{Path, PathBuf},
 };
 
@@ -210,11 +210,19 @@ pub fn get_all_tags_deferred() -> Vec<String> {
 
 pub fn get_all_join_objects() -> Vec<Box<dyn SqlJoinInfo>> {
     let v: Vec<Box<dyn SqlJoinInfo>> = vec![
-        Box::new(tes3::esp::Effect::default()),
-        Box::new(tes3::esp::BipedObject::default()),
         Box::new(tes3::esp::SpellJoin::default()),
         Box::new(tes3::esp::SoundJoin::default()),
         Box::new(tes3::esp::InventoryJoin::default()),
+        Box::new(tes3::esp::ItemJoin::default()),
+        Box::new(tes3::esp::CreatureJoin::default()),
+        Box::new(tes3::esp::TravelDestination::default()),
+        Box::new(tes3::esp::AiPackage::default()),
+        Box::new(tes3::esp::Filter::default()),
+        Box::new(tes3::esp::FactionReaction::default()),
+        Box::new(tes3::esp::FactionRequirement::default()),
+        Box::new(tes3::esp::BipedObject::default()),
+        Box::new(tes3::esp::Effect::default()),
+        Box::new(tes3::esp::Reference::default()),
     ];
     v
 }
@@ -324,4 +332,40 @@ where
             )
     });
     plugins
+}
+
+pub fn init_logger(file_name: &Path) -> Result<(), log::SetLoggerError> {
+    let file = std::fs::File::create(file_name).expect("Could not create file");
+    let logger = SimpleLogger::new(file);
+
+    log::set_boxed_logger(logger).map(|()| log::set_max_level(log::LevelFilter::Info))
+}
+
+struct SimpleLogger {
+    log_file: std::sync::Mutex<std::fs::File>,
+}
+impl SimpleLogger {
+    fn new(file: std::fs::File) -> Box<SimpleLogger> {
+        Box::new(SimpleLogger {
+            log_file: std::sync::Mutex::new(file),
+        })
+    }
+}
+
+impl log::Log for SimpleLogger {
+    fn enabled(&self, metadata: &log::Metadata) -> bool {
+        metadata.level() <= log::Level::Info
+    }
+
+    fn log(&self, record: &log::Record) {
+        if self.enabled(record.metadata()) {
+            println!("{} - {}", record.level(), record.args());
+
+            let msg = format!("{} - {}\n", record.level(), record.args());
+            let mut lock = self.log_file.lock().unwrap();
+            lock.write_all(msg.as_bytes()).unwrap();
+        }
+    }
+
+    fn flush(&self) {}
 }

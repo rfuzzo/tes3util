@@ -1,7 +1,7 @@
 use std::{collections::HashMap, path::PathBuf};
 
 use fnv_rs::{Fnv64, FnvHasher};
-use rusqlite::{params, Connection, Result};
+use rusqlite::{params, Connection};
 use tes3::esp::{traits::TableSchema, EditorId, SqlInfo, SqlInfoMeta, TypeInfo};
 
 use crate::*;
@@ -44,7 +44,7 @@ pub fn sql_task(input: &Option<PathBuf>, output: &Option<PathBuf>) -> std::io::R
         panic!("Invalid input path");
     };
 
-    println!("Found plugins: {:?}", plugin_paths);
+    log::info!("Found plugins: {:?}", plugin_paths);
 
     let mut outputpath = PathBuf::from("./tes3.db3");
     if let Some(output) = output {
@@ -71,26 +71,14 @@ pub fn sql_task(input: &Option<PathBuf>, output: &Option<PathBuf>) -> std::io::R
 
     // create tables
     {
-        println!("Create tables");
-        let schemas = get_schemas();
-        match create_tables(&db, &schemas) {
-            Ok(_) => {}
-            Err(e) => {
-                println!("Error creating tables: {}", e);
-            }
-        }
+        log::info!("Create tables");
+        create_tables(&db, &get_schemas());
     }
 
     // create join tables
     {
-        println!("Create join tables");
-        let schemas = get_join_schemas();
-        match create_join_tables(&db, &schemas) {
-            Ok(_) => {}
-            Err(e) => {
-                println!("Error creating join tables: {}", e);
-            }
-        }
+        log::info!("Create join tables");
+        create_join_tables(&db, &get_join_schemas());
     }
 
     // debug todo
@@ -102,7 +90,7 @@ pub fn sql_task(input: &Option<PathBuf>, output: &Option<PathBuf>) -> std::io::R
     // }
 
     // populate plugins db
-    println!("Generating plugin db");
+    log::info!("Generating plugin db");
 
     let mut plugins = Vec::new();
     for path in plugin_paths.iter() {
@@ -122,7 +110,7 @@ pub fn sql_task(input: &Option<PathBuf>, output: &Option<PathBuf>) -> std::io::R
                 params![plugin_model.name, plugin_model.crc, plugin_model.load_order],
             ) {
                 Ok(_) => {}
-                Err(e) => println!("Could not insert plugin into table {}", e),
+                Err(e) => log::error!("Could not insert plugin into table {}", e),
             }
 
             plugins.push((filename, plugin));
@@ -130,9 +118,7 @@ pub fn sql_task(input: &Option<PathBuf>, output: &Option<PathBuf>) -> std::io::R
     }
 
     // populate records tables
-    println!("Generating records db");
-
-    let mut errors = Vec::new();
+    log::info!("Generating records db");
 
     for (name, plugin) in plugins.iter().rev() {
         // group by tag
@@ -150,7 +136,7 @@ pub fn sql_task(input: &Option<PathBuf>, output: &Option<PathBuf>) -> std::io::R
             }
 
             if let Some(group) = groups.get(&tag) {
-                println!("Processing tag: {}", tag);
+                log::info!("Processing tag: {}", tag);
 
                 SQL_BEGIN!(db);
 
@@ -158,14 +144,12 @@ pub fn sql_task(input: &Option<PathBuf>, output: &Option<PathBuf>) -> std::io::R
                     match record.table_insert(&db, name) {
                         Ok(_) => {}
                         Err(e) => {
-                            let error_msg = format!(
+                            log::error!(
                                 "[{}] Error inserting record '{}': '{}'",
                                 record.table_name(),
                                 record.editor_id(),
                                 e
                             );
-                            println!("{}", error_msg);
-                            errors.push(error_msg);
                         }
                     }
                 }
@@ -201,56 +185,49 @@ pub fn sql_task(input: &Option<PathBuf>, output: &Option<PathBuf>) -> std::io::R
         //     .expect("Could not commit transaction");
     }
 
-    // serialize errors to file
-    if !errors.is_empty() {
-        let mut file = std::fs::File::create("errors.txt").expect("Could not create file");
-        for error in errors {
-            std::io::Write::write_all(&mut file, error.as_bytes()).unwrap();
-            std::io::Write::write_all(&mut file, b"\n").unwrap();
+    Ok(())
+}
+
+fn create_tables(conn: &Connection, schemas: &[TableSchema]) {
+    for schema in schemas {
+        let columns = schema.columns.join(", ");
+        let constraints = schema.constraints.join(", ");
+
+        let sql = if constraints.is_empty() {
+            format!(
+                "CREATE TABLE IF NOT EXISTS {} (
+                id  TEXT PRIMARY KEY,
+                mod TEXT NOT NULL,
+                flags TEXT NOT NULL,
+                {},
+                FOREIGN KEY(mod) REFERENCES plugins(name)
+                )",
+                schema.name, columns
+            )
+        } else {
+            format!(
+                "CREATE TABLE IF NOT EXISTS {} (
+                id  TEXT PRIMARY KEY,
+                mod TEXT NOT NULL,
+                flags TEXT NOT NULL,
+                {}, 
+                FOREIGN KEY(mod) REFERENCES plugins(name),
+                {}
+                )",
+                schema.name, columns, constraints
+            )
+        };
+
+        log::info!("Creating table {}: {}", schema.name, sql);
+
+        match conn.execute(&sql, []) {
+            Ok(_) => {}
+            Err(e) => log::error!("Error creating table {}: {}", schema.name, e),
         }
     }
-
-    Ok(())
 }
 
-fn create_tables(conn: &Connection, schemas: &[TableSchema]) -> Result<()> {
-    for schema in schemas {
-        let columns = schema.columns.join(", ");
-        let constraints = schema.constraints.join(", ");
-
-        let sql = if constraints.is_empty() {
-            format!(
-                "CREATE TABLE IF NOT EXISTS {} (
-                id  TEXT PRIMARY KEY,
-                mod TEXT NOT NULL,
-                flags TEXT NOT NULL,
-                {},
-                FOREIGN KEY(mod) REFERENCES plugins(name)
-                )",
-                schema.name, columns
-            )
-        } else {
-            format!(
-                "CREATE TABLE IF NOT EXISTS {} (
-                id  TEXT PRIMARY KEY,
-                mod TEXT NOT NULL,
-                flags TEXT NOT NULL,
-                {}, 
-                FOREIGN KEY(mod) REFERENCES plugins(name),
-                {}
-                )",
-                schema.name, columns, constraints
-            )
-        };
-
-        //println!("{}", sql);
-
-        conn.execute(&sql, [])?;
-    }
-    Ok(())
-}
-
-fn create_join_tables(conn: &Connection, schemas: &[TableSchema]) -> Result<()> {
+fn create_join_tables(conn: &Connection, schemas: &[TableSchema]) {
     for schema in schemas {
         let columns = schema.columns.join(", ");
         let constraints = schema.constraints.join(", ");
@@ -276,11 +253,13 @@ fn create_join_tables(conn: &Connection, schemas: &[TableSchema]) -> Result<()> 
             )
         };
 
-        //println!("{}", sql);
+        log::info!("Creating table {}: {}", schema.name, sql);
 
-        conn.execute(&sql, [])?;
+        match conn.execute(&sql, []) {
+            Ok(_) => {}
+            Err(e) => log::error!("Error creating table {}: {}", schema.name, e),
+        }
     }
-    Ok(())
 }
 
 fn get_schemas() -> Vec<TableSchema> {
@@ -305,6 +284,8 @@ fn get_join_schemas() -> Vec<TableSchema> {
 
 #[test]
 fn test_sql_task() -> std::io::Result<()> {
+    init_logger(Path::new("log.txt")).expect("Could not initialize logger");
+
     let input = std::path::Path::new("tests/assets/Morrowind.esm");
     let output = std::path::Path::new("./tes3.db3");
     // delete db if exists
