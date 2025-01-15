@@ -6,6 +6,11 @@ use tes3::esp::{traits::TableSchema, EditorId, SqlInfo, SqlInfoMeta, TypeInfo};
 
 use crate::*;
 
+// todo sql
+// check foreign keys in join tables
+// check unique constraints in join tables
+// todo sql color representation
+
 #[macro_export]
 macro_rules! SQL_BEGIN {
     ( $db:expr ) => {
@@ -152,7 +157,24 @@ pub fn sql_task(input: &Option<PathBuf>, output: &Option<PathBuf>) -> std::io::R
                             );
                         }
                     }
+                }
+            }
+        }
 
+        SQL_COMMIT!(db);
+
+        SQL_BEGIN!(db);
+
+        for tag in get_all_tags_fk() {
+            // skip headers
+            if tag == "TES3" {
+                continue;
+            }
+
+            if let Some(group) = groups.get(&tag) {
+                log::info!("Processing join records for tag: {}", tag);
+
+                for record in group {
                     match record.join_table_insert(&db, name) {
                         Ok(_) => {}
                         Err(e) => {

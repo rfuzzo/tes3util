@@ -193,8 +193,8 @@ pub fn get_all_tags_fk() -> Vec<String> {
 
     let v = vec![
         // primary
-        "TES3", "GMST", "GLOB", "BSGN", "LAND", "LEVC", "LEVI", "LOCK", "LTEX", "REPA", "SKIL",
-        "SPEL", "REGN", "RACE", "CLAS", "ENCH", "FACT", "SOUN", "SCPT", "STAT",
+        "TES3", "GMST", "GLOB", "LAND", "LEVC", "LEVI", "LOCK", "LTEX", "REPA", "SKIL", "SPEL",
+        "BSGN", "SOUN", "REGN", "RACE", "CLAS", "ENCH", "FACT", "SCPT", "STAT",
         // secondary
         "INGR", "LIGH", "CONT", "WEAP", "PROB", "MISC", "SSCR", "CLOT", "ARMO", "BODY", "BOOK",
         "CELL", "ACTI", "ALCH", "APPA", // cyclic
