@@ -189,6 +189,8 @@ pub fn get_all_tags() -> Vec<String> {
 
 /// super dumb but I can't be bothered to mess around with enums now
 pub fn get_all_tags_fk() -> Vec<String> {
+    //let v = vec!["BSGN"];
+
     let v = vec![
         // primary
         "TES3", "GMST", "GLOB", "BSGN", "LAND", "LEVC", "LEVI", "LOCK", "LTEX", "REPA", "SKIL",

@@ -129,6 +129,8 @@ pub fn sql_task(input: &Option<PathBuf>, output: &Option<PathBuf>) -> std::io::R
             group.push(record);
         }
 
+        SQL_BEGIN!(db);
+
         for tag in get_all_tags_fk() {
             // skip headers
             if tag == "TES3" {
@@ -136,9 +138,7 @@ pub fn sql_task(input: &Option<PathBuf>, output: &Option<PathBuf>) -> std::io::R
             }
 
             if let Some(group) = groups.get(&tag) {
-                log::info!("Processing tag: {}", tag);
-
-                SQL_BEGIN!(db);
+                log::info!("Processing records for tag: {}", tag);
 
                 for record in group {
                     match record.table_insert(&db, name) {
@@ -152,11 +152,23 @@ pub fn sql_task(input: &Option<PathBuf>, output: &Option<PathBuf>) -> std::io::R
                             );
                         }
                     }
-                }
 
-                SQL_COMMIT!(db);
+                    match record.join_table_insert(&db, name) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            log::error!(
+                                "[{}] Error inserting join record '{}': '{}'",
+                                record.table_name(),
+                                record.editor_id(),
+                                e
+                            );
+                        }
+                    }
+                }
             }
         }
+
+        SQL_COMMIT!(db);
 
         // db.execute("BEGIN", [])
         //     .expect("Could not begin transaction");
