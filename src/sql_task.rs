@@ -34,7 +34,9 @@ struct PluginModel {
 }
 
 pub fn sql_task(input: &Option<PathBuf>, output: &Option<PathBuf>) -> std::io::Result<()> {
-    let mut inputpath = PathBuf::new();
+    // get current working directory
+    let mut inputpath = PathBuf::from("./");
+
     if let Some(input) = input {
         inputpath = input.clone();
     }
@@ -43,10 +45,8 @@ pub fn sql_task(input: &Option<PathBuf>, output: &Option<PathBuf>) -> std::io::R
     // else process single file
     let plugin_paths = if inputpath.is_file() {
         vec![inputpath]
-    } else if inputpath.is_dir() {
-        get_plugins_sorted(&inputpath, false)
     } else {
-        panic!("Invalid input path");
+        get_plugins_sorted(&inputpath, false)
     };
 
     log::info!("Found plugins: {:?}", plugin_paths);
@@ -60,12 +60,17 @@ pub fn sql_task(input: &Option<PathBuf>, output: &Option<PathBuf>) -> std::io::R
         outputpath.push("tes3.db3");
     }
 
+    // delete db if exists
+    if outputpath.exists() {
+        std::fs::remove_file(&outputpath).expect("Could not delete file");
+    }
+
     // create esp db
     let db = Connection::open(outputpath).expect("Could not create db");
 
     // create plugins db
     db.execute(
-        "CREATE TABLE plugins (
+        "CREATE TABLE _plugins (
             name TEXT PRIMARY KEY,
             crc INTEGER NOT NULL,
             load_order INTEGER NOT NULL
@@ -111,7 +116,7 @@ pub fn sql_task(input: &Option<PathBuf>, output: &Option<PathBuf>) -> std::io::R
 
             // add plugin to db
             match db.execute(
-                "INSERT INTO plugins (name, crc, load_order) VALUES (?1, ?2, ?3)",
+                "INSERT INTO _plugins (name, crc, load_order) VALUES (?1, ?2, ?3)",
                 params![plugin_model.name, plugin_model.crc, plugin_model.load_order],
             ) {
                 Ok(_) => {}
@@ -214,7 +219,7 @@ fn create_tables(conn: &Connection, schemas: &[TableSchema]) {
                 mod TEXT NOT NULL,
                 flags TEXT NOT NULL,
                 {},
-                FOREIGN KEY(mod) REFERENCES plugins(name)
+                FOREIGN KEY(mod) REFERENCES _plugins(name)
                 )",
                 schema.name, columns
             )
@@ -225,7 +230,7 @@ fn create_tables(conn: &Connection, schemas: &[TableSchema]) {
                 mod TEXT NOT NULL,
                 flags TEXT NOT NULL,
                 {}, 
-                FOREIGN KEY(mod) REFERENCES plugins(name),
+                FOREIGN KEY(mod) REFERENCES _plugins(name),
                 {}
                 )",
                 schema.name, columns, constraints
@@ -251,7 +256,7 @@ fn create_join_tables(conn: &Connection, schemas: &[TableSchema]) {
                 "CREATE TABLE IF NOT EXISTS {} (
                 mod TEXT NOT NULL,
                 {},
-                FOREIGN KEY(mod) REFERENCES plugins(name)
+                FOREIGN KEY(mod) REFERENCES _plugins(name)
                 )",
                 schema.name, columns
             )
@@ -260,7 +265,7 @@ fn create_join_tables(conn: &Connection, schemas: &[TableSchema]) {
                 "CREATE TABLE IF NOT EXISTS {} (
                 mod TEXT NOT NULL,
                 {}, 
-                FOREIGN KEY(mod) REFERENCES plugins(name),
+                FOREIGN KEY(mod) REFERENCES _plugins(name),
                 {}
                 )",
                 schema.name, columns, constraints
@@ -300,7 +305,7 @@ fn get_join_schemas() -> Vec<TableSchema> {
 fn test_sql_task() -> std::io::Result<()> {
     init_logger(Path::new("log.txt")).expect("Could not initialize logger");
 
-    let input = std::path::Path::new("tests/assets/Data Files");
+    let input = std::path::Path::new("D:\\games\\Morrowind2\\Data Files");
     let output = std::path::Path::new("./tes3.db3");
     // delete db if exists
     if output.exists() {
