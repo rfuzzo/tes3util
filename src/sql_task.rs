@@ -230,7 +230,7 @@ fn create_tables(conn: &Connection, schemas: &[TableSchema]) {
         let sql = if constraints.is_empty() {
             format!(
                 "CREATE TABLE IF NOT EXISTS {} (
-                id  TEXT PRIMARY KEY,
+                id  TEXT COLLATE NOCASE PRIMARY KEY,
                 mod TEXT NOT NULL,
                 flags TEXT NOT NULL,
                 {},
@@ -241,7 +241,7 @@ fn create_tables(conn: &Connection, schemas: &[TableSchema]) {
         } else {
             format!(
                 "CREATE TABLE IF NOT EXISTS {} (
-                id  TEXT PRIMARY KEY,
+                id  TEXT COLLATE NOCASE PRIMARY KEY,
                 mod TEXT NOT NULL,
                 flags TEXT NOT NULL,
                 {}, 
