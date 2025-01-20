@@ -125,7 +125,9 @@ pub fn sql_task(input: &Option<PathBuf>, output: &Option<PathBuf>) -> std::io::R
     // populate records tables
     log::info!("Generating records db");
 
-    for (name, plugin) in plugins.iter().rev() {
+    for (name, plugin) in plugins.iter() {
+        log::info!("> Processing plugin: {}", name);
+
         // group by tag
         let mut groups = HashMap::new();
         for record in &plugin.objects {
@@ -143,7 +145,7 @@ pub fn sql_task(input: &Option<PathBuf>, output: &Option<PathBuf>) -> std::io::R
             }
 
             if let Some(group) = groups.get(&tag) {
-                log::info!("Processing records for tag: {}", tag);
+                log::debug!("Processing records for tag: {}", tag);
 
                 for record in group {
                     match record.table_insert(&db, name) {
@@ -172,7 +174,7 @@ pub fn sql_task(input: &Option<PathBuf>, output: &Option<PathBuf>) -> std::io::R
             }
 
             if let Some(group) = groups.get(&tag) {
-                log::info!("Processing join records for tag: {}", tag);
+                log::debug!("Processing join records for tag: {}", tag);
 
                 for record in group {
                     match record.join_table_insert(&db, name) {
@@ -191,33 +193,9 @@ pub fn sql_task(input: &Option<PathBuf>, output: &Option<PathBuf>) -> std::io::R
         }
 
         SQL_COMMIT!(db);
-
-        // db.execute("BEGIN", [])
-        //     .expect("Could not begin transaction");
-        // for tag in get_all_tags_deferred() {
-        //     if let Some(group) = groups.get(&tag) {
-        //         println!("Processing tag: {}", tag);
-
-        //         for record in group {
-        //             match record.table_insert(&db, name) {
-        //                 Ok(_) => {}
-        //                 Err(e) => {
-        //                     let error_msg = format!(
-        //                         "[{}] Error inserting record '{}': '{}'",
-        //                         record.table_name(),
-        //                         record.editor_id(),
-        //                         e
-        //                     );
-        //                     println!("{}", error_msg);
-        //                     errors.push(error_msg);
-        //                 }
-        //             }
-        //         }
-        //     }
-        // }
-        // db.execute("COMMIT", [])
-        //     .expect("Could not commit transaction");
     }
+
+    log::info!("Done processing plugins");
 
     Ok(())
 }
@@ -252,7 +230,7 @@ fn create_tables(conn: &Connection, schemas: &[TableSchema]) {
             )
         };
 
-        log::info!("Creating table {}: {}", schema.name, sql);
+        log::debug!("Creating table {}: {}", schema.name, sql);
 
         match conn.execute(&sql, []) {
             Ok(_) => {}
@@ -287,7 +265,7 @@ fn create_join_tables(conn: &Connection, schemas: &[TableSchema]) {
             )
         };
 
-        log::info!("Creating table {}: {}", schema.name, sql);
+        log::debug!("Creating table {}: {}", schema.name, sql);
 
         match conn.execute(&sql, []) {
             Ok(_) => {}
@@ -320,7 +298,7 @@ fn get_join_schemas() -> Vec<TableSchema> {
 fn test_sql_task() -> std::io::Result<()> {
     init_logger(Path::new("log.txt")).expect("Could not initialize logger");
 
-    let input = std::path::Path::new("tests/assets/Morrowind.esm");
+    let input = std::path::Path::new("tests/assets/Data Files");
     let output = std::path::Path::new("./tes3.db3");
     // delete db if exists
     if output.exists() {
