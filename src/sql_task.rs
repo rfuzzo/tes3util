@@ -152,7 +152,8 @@ pub fn sql_task(input: &Option<PathBuf>, output: &Option<PathBuf>) -> std::io::R
                         Ok(_) => {}
                         Err(e) => {
                             log::error!(
-                                "[{}] Error inserting record '{}': '{}'",
+                                "[{}] Error inserting {} record '{}': '{}'",
+                                name,
                                 record.table_name(),
                                 record.editor_id(),
                                 e
@@ -181,7 +182,8 @@ pub fn sql_task(input: &Option<PathBuf>, output: &Option<PathBuf>) -> std::io::R
                         Ok(_) => {}
                         Err(e) => {
                             log::error!(
-                                "[{}] Error inserting join record '{}': '{}'",
+                                "[{}] Error inserting {} join record '{}': '{}'",
+                                name,
                                 record.table_name(),
                                 record.editor_id(),
                                 e
