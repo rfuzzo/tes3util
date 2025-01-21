@@ -2,7 +2,9 @@ use std::{collections::HashMap, path::PathBuf};
 
 use fnv_rs::{Fnv64, FnvHasher};
 use rusqlite::{params, Connection};
-use tes3::esp::{traits::TableSchema, EditorId, SqlInfo, SqlInfoMeta, TypeInfo};
+use tes3::esp::{
+    traits::JoinTableSchema, traits::TableSchema, EditorId, SqlInfo, SqlInfoMeta, TypeInfo,
+};
 
 use crate::*;
 
@@ -246,12 +248,14 @@ fn create_tables(conn: &Connection, schemas: &[TableSchema]) {
     }
 }
 
-fn create_join_tables(conn: &Connection, schemas: &[TableSchema]) {
+fn create_join_tables(conn: &Connection, schemas: &[JoinTableSchema]) {
     for schema in schemas {
         let columns = schema.columns.join(", ");
         let constraints = schema.constraints.join(", ");
+        let parents = schema.parent_constraints.join(", ");
+        let final_constraints = format!("{} {}", constraints, parents);
 
-        let sql = if constraints.is_empty() {
+        let sql = if final_constraints.is_empty() {
             format!(
                 "CREATE TABLE IF NOT EXISTS {} (
                 mod TEXT NOT NULL,
@@ -268,7 +272,7 @@ fn create_join_tables(conn: &Connection, schemas: &[TableSchema]) {
                 FOREIGN KEY(mod) REFERENCES _plugins(name),
                 {}
                 )",
-                schema.name, columns, constraints
+                schema.name, columns, final_constraints
             )
         };
 
@@ -292,7 +296,7 @@ fn get_schemas() -> Vec<TableSchema> {
     schemas
 }
 
-fn get_join_schemas() -> Vec<TableSchema> {
+fn get_join_schemas() -> Vec<JoinTableSchema> {
     let mut schemas = Vec::new();
     for x in get_all_join_objects() {
         schemas.push(x.table_schema());
@@ -303,7 +307,8 @@ fn get_join_schemas() -> Vec<TableSchema> {
 
 #[test]
 fn test_sql_task() -> std::io::Result<()> {
-    init_logger(Path::new("log.txt")).expect("Could not initialize logger");
+    init_logger(Path::new("log.txt"), log::LevelFilter::Debug)
+        .expect("Could not initialize logger");
 
     let input = std::path::Path::new("D:\\games\\Morrowind2\\Data Files");
     let output = std::path::Path::new("./tes3.db3");
@@ -314,6 +319,94 @@ fn test_sql_task() -> std::io::Result<()> {
 
     sql_task(&Some(input.into()), &Some(output.into()))
 }
+#[test]
+fn test_graph() {
+    init_logger(Path::new("log.txt"), log::LevelFilter::Info).expect("Could not initialize logger");
 
-// testing
-// .\tes3util.exe sql d:\GitHub\__rfuzzo\tes3util\tests\assets\Morrowind.esm -o D:\GitHub\__rfuzzo\tes3util\tes3.db3
+    let mut edges: HashMap<&str, Vec<&str>> = HashMap::new();
+
+    // records
+    for tag in get_all_tags() {
+        if let Some(instance) = create_from_tag(&tag) {
+            edges.entry(instance.table_name()).or_default();
+
+            // get foreign keys
+            let fks = instance.table_constraints();
+
+            // split to get table name
+            for fk in fks {
+                let splits = fk.split("REFERENCES").collect::<Vec<&str>>();
+                let target_with_id = splits[1].trim();
+                let target_table = target_with_id.split("(").collect::<Vec<&str>>()[0].trim();
+                // add edge
+                let edge = edges.entry(instance.table_name()).or_default();
+                edge.push(target_table);
+            }
+        }
+    }
+
+    // join tables
+    for instance in get_all_join_objects() {
+        edges.entry(instance.table_name()).or_default();
+
+        let fks = instance.table_constraints();
+        for fk in fks {
+            // split to get table name
+            let splits = fk.split("REFERENCES").collect::<Vec<&str>>();
+            let target_with_id = splits[1].trim();
+            let target_table = target_with_id.split("(").collect::<Vec<&str>>()[0].trim();
+            // add edge
+            let edge = edges.entry(instance.table_name()).or_default();
+            edge.push(target_table);
+        }
+
+        let parents = instance.table_parent_constraints();
+        for parent in parents {
+            // split to get table name
+            let splits = parent.split("REFERENCES").collect::<Vec<&str>>();
+            let target_with_id = splits[1].trim();
+            let target_table = target_with_id.split("(").collect::<Vec<&str>>()[0].trim();
+            // add reversed edge
+            let edge = edges.entry(target_table).or_default();
+            edge.push(instance.table_name());
+        }
+    }
+
+    // create graphviz file
+    let mut file = std::fs::File::create("graph.dot").expect("Could not create file");
+    file.write_all(b"digraph G {\n")
+        .expect("Could not write to file");
+
+    for (k, v) in edges.iter() {
+        let mut targets = String::new();
+        for t in v {
+            targets.push_str(t);
+            targets.push(' ');
+        }
+        let line = format!("{} -> {{{}}}\n", k, targets);
+
+        file.write_all(line.as_bytes())
+            .expect("Could not write to file");
+    }
+
+    file.write_all(b"}").expect("Could not write to file");
+
+    // run graphviz
+    // dot -Tpng graph.dot -o graph.png
+
+    use std::process::Command;
+    let layouts = vec!["dot", "fdp"];
+    for layout in layouts {
+        let filename = format!("graph_{}.png", layout);
+        let layout_command = format!("-K{}", layout);
+
+        let _output = Command::new("dot")
+            .arg(layout_command)
+            .arg("-Tpng")
+            .arg("graph.dot")
+            .arg("-o")
+            .arg(filename)
+            .output()
+            .expect("Could not run dot");
+    }
+}

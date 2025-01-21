@@ -1,0 +1,58 @@
+digraph G {
+TES3 -> {}
+BODY -> {RACE }
+LIGH -> {SCPT SOUN }
+JOIN_Creature -> {}
+RACE -> {JOIN_Spells }
+STAT -> {}
+DOOR -> {SCPT SOUN SOUN }
+GMST -> {}
+DIAL -> {}
+LTEX -> {}
+REGN -> {JOIN_Sounds }
+CONT -> {SCPT JOIN_Inventory }
+ENCH -> {JOIN_Effect }
+JOIN_Item -> {}
+MISC -> {SCPT }
+JOIN_TravelDestination -> {}
+JOIN_AiPackage -> {}
+LEVC -> {JOIN_Creature }
+SSCR -> {SCPT }
+NPC_ -> {SCPT RACE CLAS FACT BODY BODY JOIN_Spells JOIN_Inventory JOIN_TravelDestination JOIN_AiPackage }
+SPEL -> {JOIN_Effect }
+JOIN_Filter -> {}
+JOIN_FactionReaction -> {FACT }
+JOIN_Effect -> {}
+WEAP -> {SCPT ENCH }
+ARMO -> {SCPT ENCH JOIN_BipedObject }
+PGRD -> {}
+CELL -> {REGN JOIN_Reference }
+JOIN_Reference -> {NPC_ GLOB FACT }
+BOOK -> {SCPT ENCH }
+INFO -> {NPC_ RACE CLAS FACT FACT JOIN_Filter }
+JOIN_Sounds -> {SOUN }
+REPA -> {SCPT }
+ALCH -> {SCPT JOIN_Effect }
+MGEF -> {SOUN SOUN SOUN SOUN }
+LEVI -> {JOIN_Item }
+JOIN_Inventory -> {}
+PROB -> {SCPT }
+GLOB -> {}
+CREA -> {SCPT JOIN_Spells JOIN_Inventory JOIN_TravelDestination JOIN_AiPackage }
+FACT -> {JOIN_FactionReaction JOIN_FactionRequirement }
+CLOT -> {SCPT ENCH JOIN_BipedObject }
+APPA -> {SCPT }
+CLAS -> {}
+JOIN_Spells -> {SPEL }
+INGR -> {SCPT }
+JOIN_FactionRequirement -> {}
+SCPT -> {}
+LOCK -> {SCPT }
+SKIL -> {}
+BSGN -> {JOIN_Spells }
+LAND -> {}
+JOIN_BipedObject -> {BODY BODY }
+SOUN -> {}
+SNDG -> {CREA SOUN }
+ACTI -> {SCPT }
+}

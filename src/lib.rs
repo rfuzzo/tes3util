@@ -336,11 +336,11 @@ where
     plugins
 }
 
-pub fn init_logger(file_name: &Path) -> Result<(), log::SetLoggerError> {
+pub fn init_logger(file_name: &Path, level: log::LevelFilter) -> Result<(), log::SetLoggerError> {
     let file = std::fs::File::create(file_name).expect("Could not create file");
     let logger = SimpleLogger::new(file);
 
-    log::set_boxed_logger(logger).map(|()| log::set_max_level(log::LevelFilter::Info))
+    log::set_boxed_logger(logger).map(|()| log::set_max_level(level))
 }
 
 struct SimpleLogger {

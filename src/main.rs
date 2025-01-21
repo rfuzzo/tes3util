@@ -104,8 +104,9 @@ enum Commands {
 }
 
 fn main() {
-    // logger
-    tes3util::init_logger(Path::new("log.txt")).expect("Could not initialize logger");
+    // logger TODO set log level
+    tes3util::init_logger(Path::new("log.txt"), log::LevelFilter::Info)
+        .expect("Could not initialize logger");
 
     match &Cli::parse().commands {
         Commands::Dump {
