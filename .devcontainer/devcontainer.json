@@ -3,9 +3,7 @@
     "codespaces": {
       "repositories": {
         "rfuzzo/tes3": {
-          "permissions": {
-            "issues": "write"
-          }
+          "permissions": "write-all"
         }
       }
     }
