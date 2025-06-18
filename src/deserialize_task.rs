@@ -80,14 +80,14 @@ pub fn deserialize_plugin(
             if let Ok(t) = deserialized {
                 plugin = t;
             } else {
-                return Err(Error::new(ErrorKind::Other, "Failed to convert from toml"));
+                return Err(Error::other("Failed to convert from toml"));
             }
         } else if is_extension(input_path, "json") {
             let deserialized: Result<_, _> = serde_json::from_str(&text);
             if let Ok(t) = deserialized {
                 plugin = t;
             } else {
-                return Err(Error::new(ErrorKind::Other, "Failed to convert from json"));
+                return Err(Error::other("Failed to convert from json"));
             }
         } else if is_extension(input_path, "yaml") {
             let deserialized: Result<_, _> = serde_yaml::from_str(&text);
@@ -97,15 +97,14 @@ pub fn deserialize_plugin(
                 }
                 Err(e) => {
                     println!("{}", e);
-                    return Err(Error::new(ErrorKind::Other, "Failed to convert from yaml"));
+                    return Err(Error::other("Failed to convert from yaml"));
                 }
             }
         }
 
         plugin.save_path(output_path)
     } else {
-        Err(Error::new(
-            ErrorKind::Other,
+        Err(Error::other(
             "Failed to read the input file",
         ))
     }

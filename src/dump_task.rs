@@ -141,7 +141,7 @@ fn dump_plugin(
             }
         }
         Err(_) => {
-            return Err(Error::new(ErrorKind::Other, "Plugin parsing failed."));
+            return Err(Error::other("Plugin parsing failed."));
         }
     }
     Ok(())
@@ -224,8 +224,7 @@ fn write_script(script: &Script, out_dir: &Path) -> io::Result<()> {
         match fs::create_dir_all(out_dir) {
             Ok(_) => {}
             Err(_) => {
-                return Err(Error::new(
-                    ErrorKind::Other,
+                return Err(Error::other(
                     "Failed to create output directory.",
                 ));
             }
@@ -245,11 +244,11 @@ fn write_script(script: &Script, out_dir: &Path) -> io::Result<()> {
                 //println!("SCPT written to: {}", output_path.display());
             }
             Err(_) => {
-                return Err(Error::new(ErrorKind::Other, "File write failed"));
+                return Err(Error::other("File write failed"));
             }
         },
         Err(_) => {
-            return Err(Error::new(ErrorKind::Other, "File create failed"));
+            return Err(Error::other("File create failed"));
         }
     }
 
@@ -279,7 +278,7 @@ fn serialize(typ: &ESerializedType, object: &TES3Object) -> Result<String, Resul
             match result {
                 Ok(t) => t,
                 Err(e) => {
-                    return Err(Err(Error::new(ErrorKind::Other, e.to_string())));
+                    return Err(Err(Error::other(e.to_string())));
                 }
             }
         }
@@ -288,7 +287,7 @@ fn serialize(typ: &ESerializedType, object: &TES3Object) -> Result<String, Resul
             match result {
                 Ok(t) => t,
                 Err(e) => {
-                    return Err(Err(Error::new(ErrorKind::Other, e.to_string())));
+                    return Err(Err(Error::other(e.to_string())));
                 }
             }
         }
@@ -297,7 +296,7 @@ fn serialize(typ: &ESerializedType, object: &TES3Object) -> Result<String, Resul
             match result {
                 Ok(t) => t,
                 Err(e) => {
-                    return Err(Err(Error::new(ErrorKind::Other, e.to_string())));
+                    return Err(Err(Error::other(e.to_string())));
                 }
             }
         }
@@ -312,8 +311,7 @@ fn write_to_file(out_dir: &Path, name: &String, text: String) -> Result<(), Erro
         match fs::create_dir_all(out_dir) {
             Ok(_) => {}
             Err(_) => {
-                return Err(Error::new(
-                    ErrorKind::Other,
+                return Err(Error::other(
                     "Failed to create output directory.",
                 ));
             }
@@ -330,8 +328,8 @@ fn write_to_file(out_dir: &Path, name: &String, text: String) -> Result<(), Erro
                 //println!("MISC writen to: {}", output_path.display());
                 Ok(())
             }
-            Err(_) => Err(Error::new(ErrorKind::Other, "File write failed")),
+            Err(_) => Err(Error::other("File write failed")),
         },
-        Err(_) => Err(Error::new(ErrorKind::Other, "File create failed")),
+        Err(_) => Err(Error::other("File create failed")),
     }
 }

@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     env,
     fs::{self, File},
-    io::{self, Error, ErrorKind, Write},
+    io::{self, Error, Write},
     path::PathBuf,
 };
 
@@ -20,7 +20,7 @@ fn read_file_contents(file_path: &String) -> io::Result<(String, Vec<String>)> {
         return Ok((file_path.clone(), list));
     }
 
-    Err(Error::new(ErrorKind::Other, "Failed to read file contents"))
+    Err(Error::other("Failed to read file contents"))
 }
 
 pub fn atlas_coverage(input: &Option<PathBuf>, output: &Option<PathBuf>) -> io::Result<()> {

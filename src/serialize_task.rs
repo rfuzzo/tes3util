@@ -59,7 +59,7 @@ pub fn serialize_plugin(
                     match result {
                         Ok(t) => t,
                         Err(e) => {
-                            return Err(Error::new(ErrorKind::Other, e.to_string()));
+                            return Err(Error::other(e.to_string()));
                         }
                     }
                 }
@@ -68,7 +68,7 @@ pub fn serialize_plugin(
                     match result {
                         Ok(t) => t,
                         Err(e) => {
-                            return Err(Error::new(ErrorKind::Other, e.to_string()));
+                            return Err(Error::other(e.to_string()));
                         }
                     }
                 }
@@ -77,7 +77,7 @@ pub fn serialize_plugin(
                     match result {
                         Ok(t) => t,
                         Err(e) => {
-                            return Err(Error::new(ErrorKind::Other, e.to_string()));
+                            return Err(Error::other(e.to_string()));
                         }
                     }
                 }
@@ -85,6 +85,6 @@ pub fn serialize_plugin(
 
             File::create(output_path)?.write_all(text.as_bytes())
         }
-        Err(_) => Err(Error::new(ErrorKind::Other, "Plugin parsing failed.")),
+        Err(_) => Err(Error::other("Plugin parsing failed.")),
     }
 }
