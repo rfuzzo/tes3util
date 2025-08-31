@@ -224,9 +224,7 @@ fn write_script(script: &Script, out_dir: &Path) -> io::Result<()> {
         match fs::create_dir_all(out_dir) {
             Ok(_) => {}
             Err(_) => {
-                return Err(Error::other(
-                    "Failed to create output directory.",
-                ));
+                return Err(Error::other("Failed to create output directory."));
             }
         }
     }
@@ -274,7 +272,7 @@ fn write_generic(
 fn serialize(typ: &ESerializedType, object: &TES3Object) -> Result<String, Result<(), Error>> {
     let text = match typ {
         ESerializedType::Yaml => {
-            let result = serde_yaml::to_string(object);
+            let result = serde_yaml_ng::to_string(object);
             match result {
                 Ok(t) => t,
                 Err(e) => {
@@ -311,9 +309,7 @@ fn write_to_file(out_dir: &Path, name: &String, text: String) -> Result<(), Erro
         match fs::create_dir_all(out_dir) {
             Ok(_) => {}
             Err(_) => {
-                return Err(Error::other(
-                    "Failed to create output directory.",
-                ));
+                return Err(Error::other("Failed to create output directory."));
             }
         }
     }

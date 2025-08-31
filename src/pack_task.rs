@@ -53,7 +53,7 @@ pub fn pack(
         if let Ok(text) = result {
             match format {
                 ESerializedType::Yaml => {
-                    let deserialized: Result<TES3Object, _> = serde_yaml::from_str(&text);
+                    let deserialized: Result<TES3Object, _> = serde_yaml_ng::from_str(&text);
                     if let Ok(object) = deserialized {
                         records.push(object);
                     } else {

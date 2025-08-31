@@ -55,7 +55,7 @@ pub fn serialize_plugin(
         Ok(plugin) => {
             let text = match format {
                 ESerializedType::Yaml => {
-                    let result = serde_yaml::to_string(&plugin);
+                    let result = serde_yaml_ng::to_string(&plugin);
                     match result {
                         Ok(t) => t,
                         Err(e) => {

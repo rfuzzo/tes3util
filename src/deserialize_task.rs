@@ -90,7 +90,7 @@ pub fn deserialize_plugin(
                 return Err(Error::other("Failed to convert from json"));
             }
         } else if is_extension(input_path, "yaml") {
-            let deserialized: Result<_, _> = serde_yaml::from_str(&text);
+            let deserialized: Result<_, _> = serde_yaml_ng::from_str(&text);
             match deserialized {
                 Ok(t) => {
                     plugin = t;
@@ -104,8 +104,6 @@ pub fn deserialize_plugin(
 
         plugin.save_path(output_path)
     } else {
-        Err(Error::other(
-            "Failed to read the input file",
-        ))
+        Err(Error::other("Failed to read the input file"))
     }
 }

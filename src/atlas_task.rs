@@ -112,7 +112,7 @@ pub fn atlas_coverage(input: &Option<PathBuf>, output: &Option<PathBuf>) -> io::
         map.insert("with_atl", &map_some);
         map.insert("without_atl", &map_none);
 
-        let text = serde_yaml::to_string(&map).unwrap();
+        let text = serde_yaml_ng::to_string(&map).unwrap();
         let mut file = File::create(output_path)?;
         file.write_all(text.as_bytes())?;
     }
@@ -128,7 +128,7 @@ pub fn atlas_coverage(input: &Option<PathBuf>, output: &Option<PathBuf>) -> io::
         let coverage = (map_some.len() as f32 / total as f32) * 100.0;
         stats.insert("coverage", coverage.to_string());
 
-        let text = serde_yaml::to_string(&stats).unwrap();
+        let text = serde_yaml_ng::to_string(&stats).unwrap();
         let mut file = File::create(out_dir_path.join("atlas_coverage_stats.yaml"))?;
         file.write_all(text.as_bytes())?;
     }
