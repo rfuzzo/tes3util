@@ -8,31 +8,25 @@ use tes3::esp::{
 
 use crate::*;
 
-// todo sql
-// check foreign keys in join tables
-// check unique constraints in join tables
-// todo sql color representation
-
-#[macro_export]
-macro_rules! SQL_BEGIN {
-    ( $db:expr ) => {
-        $db.execute("BEGIN", [])
-            .expect("Could not begin transaction");
-    };
-}
-
-#[macro_export]
-macro_rules! SQL_COMMIT {
-    ( $db:expr ) => {
-        $db.execute("COMMIT", [])
-            .expect("Could not commit transaction");
-    };
-}
-
 struct PluginModel {
     name: String,
     crc: String,
     load_order: u32,
+}
+
+// ------------------------------
+// Helpers
+// ------------------------------
+fn set_fast_pragmas(conn: &Connection) -> Result<(), rusqlite::Error> {
+    // Build-only settings (we're in-memory, so durability doesn’t matter)
+    conn.pragma_update(None, "journal_mode", "OFF")?;
+    conn.pragma_update(None, "synchronous", "OFF")?;
+    conn.pragma_update(None, "foreign_keys", "OFF")?;
+    conn.pragma_update(None, "temp_store", "MEMORY")?;
+    conn.pragma_update(None, "cache_size", -300_000i64)?;
+    conn.pragma_update(None, "locking_mode", "EXCLUSIVE")?;
+    conn.pragma_update(None, "mmap_size", 1_073_741_824i64)?;
+    Ok(())
 }
 
 pub fn sql_task(input: &Option<PathBuf>, output: &Option<PathBuf>) -> std::io::Result<()> {
@@ -53,163 +47,196 @@ pub fn sql_task(input: &Option<PathBuf>, output: &Option<PathBuf>) -> std::io::R
 
     log::info!("Found plugins: {:?}", plugin_paths);
 
-    let mut outputpath = PathBuf::from("./tes3.db3");
+    let mut output_path = PathBuf::from("./tes3.db3");
     if let Some(output) = output {
-        outputpath = output.clone();
+        output_path = output.clone();
     }
 
-    if outputpath.is_dir() {
-        outputpath.push("tes3.db3");
+    if output_path.is_dir() {
+        output_path.push("tes3.db3");
     }
 
     // delete db if exists
-    if outputpath.exists() {
-        std::fs::remove_file(&outputpath).expect("Could not delete file");
+    if output_path.exists() {
+        std::fs::remove_file(&output_path).expect("Could not delete file");
     }
 
-    // create esp db
-    let db = Connection::open(outputpath).expect("Could not create db");
+    // A) Build in-memory (fast) ↓
+    let mut mem = Connection::open_in_memory().expect("Could not open in-memory database");
+    set_fast_pragmas(&mem).expect("Could not set fast pragmas");
+
+    // --------------------------------------------------------------------------
+    // A) create tables first
+    let mut schema_tables = String::new();
 
     // create plugins db
-    db.execute(
+    schema_tables.push_str(
         "CREATE TABLE _plugins (
             name TEXT PRIMARY KEY,
             crc INTEGER NOT NULL,
             load_order INTEGER NOT NULL
-        )",
-        (), // empty list of parameters.
-    )
-    .expect("Could not create table");
+        );\n\n",
+    );
+
+    log::info!("Creating tables: {}", schema_tables);
 
     // create tables
     {
         log::info!("Create tables");
-        create_tables(&db, &get_schemas());
+        create_tables(&mut schema_tables, &get_schemas());
     }
+
+    log::info!("Creating tables: {}", schema_tables);
 
     // create join tables
     {
         log::info!("Create join tables");
-        create_join_tables(&db, &get_join_schemas());
+        create_join_tables(&mut schema_tables, &get_join_schemas());
     }
 
-    // debug todo
-    // for tag in get_all_tags() {
-    //     if let Some(instance) = create_from_tag(&tag) {
-    //         let txt = instance.table_insert_text();
-    //         println!("{}", txt);
-    //     }
-    // }
+    mem.execute_batch(&schema_tables)
+        .expect("Could not create tables");
 
-    // populate plugins db
-    log::info!("Generating plugin db");
+    // --------------------------------------------------------------------------
+    // V Bulk-insert in ONE EXCLUSIVE TX
+    {
+        let mut tx = mem
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Exclusive)
+            .expect("Could not begin transaction");
 
-    let mut plugins = Vec::new();
-    for path in plugin_paths.iter() {
-        if let Ok(plugin) = parse_plugin(path) {
-            let filename = path.file_name().unwrap().to_str().unwrap();
-            let crc = Fnv64::hash(filename.as_bytes()).as_hex();
+        // populate plugins db
+        let mut plugins = Vec::new();
+        {
+            log::info!("Generating plugin db");
 
-            let plugin_model = PluginModel {
-                name: filename.to_string(),
-                crc: crc.to_owned(), // todo
-                load_order: 0,       // todo
-            };
+            let mut s = tx
+                .prepare_cached("INSERT INTO _plugins (name, crc, load_order) VALUES (?1, ?2, ?3)")
+                .expect("Could not prepare plugins statement");
 
-            // add plugin to db
-            match db.execute(
-                "INSERT INTO _plugins (name, crc, load_order) VALUES (?1, ?2, ?3)",
-                params![plugin_model.name, plugin_model.crc, plugin_model.load_order],
-            ) {
-                Ok(_) => {}
-                Err(e) => log::error!("Could not insert plugin into table {}", e),
-            }
+            for path in plugin_paths.iter() {
+                if let Ok(plugin) = parse_plugin(path) {
+                    let filename = path.file_name().unwrap().to_str().unwrap();
+                    let crc = Fnv64::hash(filename.as_bytes()).as_hex();
 
-            plugins.push((filename, plugin));
-        }
-    }
+                    let plugin_model = PluginModel {
+                        name: filename.to_string(),
+                        crc: crc.to_owned(), // todo
+                        load_order: 0,       // todo
+                    };
 
-    // populate records tables
-    log::info!("Generating records db");
-
-    for (name, plugin) in plugins.iter() {
-        log::info!("> Processing plugin: {}", name);
-
-        // group by tag
-        let mut groups = HashMap::new();
-        for record in &plugin.objects {
-            let tag = record.tag_str();
-            let group = groups.entry(tag.to_string()).or_insert_with(Vec::new);
-            group.push(record);
-        }
-
-        SQL_BEGIN!(db);
-
-        for tag in get_all_tags_fk() {
-            // skip headers
-            if tag == "TES3" {
-                continue;
-            }
-
-            if let Some(group) = groups.get(&tag) {
-                log::debug!("Processing records for tag: {}", tag);
-
-                for record in group {
-                    match record.table_insert(&db, name) {
+                    // add plugin to db
+                    match s.execute(params![
+                        plugin_model.name,
+                        plugin_model.crc,
+                        plugin_model.load_order
+                    ]) {
                         Ok(_) => {}
-                        Err(e) => {
-                            log::error!(
-                                "[{}] Error inserting {} record '{}': '{}'",
-                                name,
-                                record.table_name(),
-                                record.editor_id(),
-                                e
-                            );
+                        Err(e) => log::error!("Could not insert plugin into table {}", e),
+                    }
+
+                    plugins.push((filename, plugin));
+                }
+            }
+        }
+
+        // populate records tables
+        {
+            log::info!("Generating records db");
+
+            for (name, plugin) in plugins.iter() {
+                log::info!("> Processing plugin: {}", name);
+
+                // group by tag
+                let mut groups = HashMap::new();
+                for record in &plugin.objects {
+                    let tag = record.tag_str();
+                    let group = groups.entry(tag.to_string()).or_insert_with(Vec::new);
+                    group.push(record);
+                }
+
+                for tag in get_all_tags_fk() {
+                    // skip headers
+                    if tag == "TES3" {
+                        continue;
+                    }
+
+                    if let Some(group) = groups.get(&tag) {
+                        log::debug!("Processing records for tag: {}", tag);
+
+                        // prepare cached schema
+                        let insert_schema_for_tag =
+                            create_from_tag(&tag).unwrap().get_insert_schema();
+                        let mut s = tx.prepare_cached(&insert_schema_for_tag).unwrap();
+
+                        // insert records
+                        for record in group {
+                            match record.insert_sql_record(name, &mut s) {
+                                Ok(_) => {}
+                                Err(e) => {
+                                    log::error!(
+                                        "[{}] Error inserting {} record '{}': '{}'",
+                                        name,
+                                        record.table_name(),
+                                        record.editor_id(),
+                                        e
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+
+                for tag in get_all_tags_fk() {
+                    // skip headers
+                    if tag == "TES3" {
+                        continue;
+                    }
+
+                    if let Some(group) = groups.get(&tag) {
+                        log::debug!("Processing join records for tag: {}", tag);
+
+                        for record in group {
+                            match record.insert_join_sql_record(name, &mut tx) {
+                                Ok(_) => {}
+                                Err(e) => {
+                                    log::error!(
+                                        "[{}] Error inserting {} join record '{}': '{}'",
+                                        name,
+                                        record.table_name(),
+                                        record.editor_id(),
+                                        e
+                                    );
+                                }
+                            }
                         }
                     }
                 }
             }
         }
 
-        SQL_COMMIT!(db);
-
-        SQL_BEGIN!(db);
-
-        for tag in get_all_tags_fk() {
-            // skip headers
-            if tag == "TES3" {
-                continue;
-            }
-
-            if let Some(group) = groups.get(&tag) {
-                log::debug!("Processing join records for tag: {}", tag);
-
-                for record in group {
-                    match record.join_table_insert(&db, name) {
-                        Ok(_) => {}
-                        Err(e) => {
-                            log::error!(
-                                "[{}] Error inserting {} join record '{}': '{}'",
-                                name,
-                                record.table_name(),
-                                record.editor_id(),
-                                e
-                            );
-                        }
-                    }
-                }
-            }
-        }
-
-        SQL_COMMIT!(db);
+        tx.commit().expect("Could not commit transaction");
+        log::info!("Done processing plugins");
     }
 
-    log::info!("Done processing plugins");
+    // --------------------------------------------------------------------------
+    // C) Validate FKs once (if you keep FKs in schema)
+    mem.pragma_update(None, "foreign_keys", "ON").unwrap();
+
+    // E) Compact & persist to file
+    mem.execute(&format!("VACUUM INTO '{}';", output_path.display()), [])
+        .expect("Failed to vacuum database");
+
+    // F) Open final DB and set read-friendly pragmas
+    let final_db = Connection::open(output_path).unwrap();
+    final_db.pragma_update(None, "journal_mode", "WAL").unwrap();
+    final_db
+        .pragma_update(None, "synchronous", "NORMAL")
+        .unwrap();
 
     Ok(())
 }
 
-fn create_tables(conn: &Connection, schemas: &[TableSchema]) {
+fn create_tables(schema_tables: &mut String, schemas: &[TableSchema]) {
     for schema in schemas {
         let columns = schema.columns.join(", ");
         let constraints = schema.constraints.join(", ");
@@ -222,7 +249,7 @@ fn create_tables(conn: &Connection, schemas: &[TableSchema]) {
                 flags TEXT NOT NULL,
                 {},
                 FOREIGN KEY(mod) REFERENCES _plugins(name)
-                )",
+                );\n\n",
                 schema.name, columns
             )
         } else {
@@ -234,21 +261,17 @@ fn create_tables(conn: &Connection, schemas: &[TableSchema]) {
                 {}, 
                 FOREIGN KEY(mod) REFERENCES _plugins(name),
                 {}
-                )",
+                );\n\n",
                 schema.name, columns, constraints
             )
         };
 
         log::debug!("Creating table {}: {}", schema.name, sql);
-
-        match conn.execute(&sql, []) {
-            Ok(_) => {}
-            Err(e) => log::error!("Error creating table {}: {}", schema.name, e),
-        }
+        schema_tables.push_str(&sql);
     }
 }
 
-fn create_join_tables(conn: &Connection, schemas: &[JoinTableSchema]) {
+fn create_join_tables(schema_tables: &mut String, schemas: &[JoinTableSchema]) {
     for schema in schemas {
         let columns = schema.columns.join(", ");
         let constraints = schema.constraints.join(", ");
@@ -261,7 +284,7 @@ fn create_join_tables(conn: &Connection, schemas: &[JoinTableSchema]) {
                 mod TEXT NOT NULL,
                 {},
                 FOREIGN KEY(mod) REFERENCES _plugins(name)
-                )",
+                );\n\n",
                 schema.name, columns
             )
         } else {
@@ -271,17 +294,13 @@ fn create_join_tables(conn: &Connection, schemas: &[JoinTableSchema]) {
                 {}, 
                 FOREIGN KEY(mod) REFERENCES _plugins(name),
                 {}
-                )",
+                );\n\n",
                 schema.name, columns, final_constraints
             )
         };
 
         log::debug!("Creating table {}: {}", schema.name, sql);
-
-        match conn.execute(&sql, []) {
-            Ok(_) => {}
-            Err(e) => log::error!("Error creating table {}: {}", schema.name, e),
-        }
+        schema_tables.push_str(&sql);
     }
 }
 
