@@ -78,15 +78,11 @@ pub fn sql_task(input: &Option<PathBuf>, output: &Option<PathBuf>) -> std::io::R
         );\n\n",
     );
 
-    log::info!("Creating tables: {}", schema_tables);
-
     // create tables
     {
         log::info!("Create tables");
         create_tables(&mut schema_tables, &get_schemas());
     }
-
-    log::info!("Creating tables: {}", schema_tables);
 
     // create join tables
     {
@@ -214,8 +210,10 @@ pub fn sql_task(input: &Option<PathBuf>, output: &Option<PathBuf>) -> std::io::R
             }
         }
 
-        tx.commit().expect("Could not commit transaction");
         log::info!("Done processing plugins");
+
+        log::info!("Committing transaction");
+        tx.commit().expect("Could not commit transaction");
     }
 
     // --------------------------------------------------------------------------
