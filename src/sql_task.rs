@@ -231,6 +231,10 @@ pub fn sql_task(input: &Option<PathBuf>, output: &Option<PathBuf>) -> std::io::R
         .pragma_update(None, "synchronous", "NORMAL")
         .unwrap();
 
+    // wait for user input
+    log::info!("Done. Press Enter to exit.");
+    std::io::stdin().read_line(&mut String::new()).unwrap();
+
     Ok(())
 }
 
