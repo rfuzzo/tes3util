@@ -39,16 +39,11 @@ jobs:
       with:
         submodules: 'true'
 
-    - uses: actions-rs/toolchain@v1
+    - uses: dtolnay/rust-toolchain@stable
       with:
-        toolchain: stable
-        target: ${{ matrix.TARGET }}
-        override: true
+        targets: ${{ matrix.TARGET }}
 
-    - uses: actions-rs/cargo@v1
-      with:
-        command: build
-        args: --verbose --release --target=${{ matrix.TARGET }}
+    - run: cargo build --verbose --release --target=${{ matrix.TARGET }}
 
     - name: Upload build artifact
       uses: actions/upload-artifact@v4
