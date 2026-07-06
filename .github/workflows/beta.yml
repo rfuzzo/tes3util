@@ -1,0 +1,62 @@
+permissions:
+  contents: write
+
+on:
+  push:
+    branches: ["main", "master"]
+
+name: Beta
+
+env:
+  RUSTFLAGS: -D warnings
+  RUSTDOCFLAGS: -D warnings
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - os: macos-latest
+          TARGET: aarch64-apple-darwin
+          ARTIFACT_NAME: tes3util-macos-arm64
+
+        - os: ubuntu-latest
+          TARGET: x86_64-unknown-linux-gnu
+          ARTIFACT_NAME: tes3util-linux-x64
+
+        - os: windows-latest
+          TARGET: x86_64-pc-windows-msvc
+          EXTENSION: .exe
+          ARTIFACT_NAME: tes3util-windows-x64
+
+    steps:
+    - name: Building ${{ matrix.TARGET }}
+      run: echo "${{ matrix.TARGET }}"
+
+    - uses: actions/checkout@v4
+      with:
+        submodules: 'true'
+
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ matrix.TARGET }}
+
+    - run: cargo build --verbose --release --target=${{ matrix.TARGET }}
+
+    - name: Upload build artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.ARTIFACT_NAME }}
+        path: target/${{ matrix.TARGET }}/release/tes3util${{ matrix.EXTENSION }}
+
+    # add to 'beta' release
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: beta
+        overwrite_files: true
+        files: target/${{ matrix.TARGET }}/release/tes3util${{ matrix.EXTENSION }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
